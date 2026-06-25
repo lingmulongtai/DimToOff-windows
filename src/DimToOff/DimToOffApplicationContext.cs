@@ -68,6 +68,8 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
 
     private void OnBrightnessChanged(object? sender, int brightness)
     {
+        bool restoreBecauseBrightnessReturned = false;
+
         lock (stateLock)
         {
             if (!settings.Enabled)
@@ -75,12 +77,21 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
                 return;
             }
 
-            if (state is AppState.Cooldown or AppState.RestoringBrightness or AppState.DisplayOffByApp)
+            if (state == AppState.DisplayOffByApp && brightness > settings.OffThreshold)
+            {
+                if (IsComfortableBrightness(brightness))
+                {
+                    lastUsableBrightness = brightness;
+                }
+
+                state = AppState.RestoringBrightness;
+                restoreBecauseBrightnessReturned = true;
+            }
+            else if (state is AppState.Cooldown or AppState.RestoringBrightness)
             {
                 return;
             }
-
-            if (brightness > settings.OffThreshold)
+            else if (brightness > settings.OffThreshold)
             {
                 if (IsComfortableBrightness(brightness))
                 {
@@ -91,8 +102,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
                 state = AppState.Idle;
                 return;
             }
-
-            if (brightness <= settings.OffThreshold && state == AppState.Idle)
+            else if (brightness <= settings.OffThreshold && state == AppState.Idle)
             {
                 if (DateTimeOffset.Now < suppressAutoOffUntil)
                 {
@@ -103,6 +113,12 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
                 state = AppState.PendingDisplayOff;
                 StartDebounceTimer();
             }
+        }
+
+        if (restoreBecauseBrightnessReturned)
+        {
+            log.Info($"Brightness returned to {brightness}%, hiding blackout");
+            PostToUiThread(async () => await RestoreFromBrightnessChangeAsync());
         }
     }
 
@@ -248,6 +264,41 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             blackoutService.Hide();
             displayPowerService.AllowNormalSleepPolicy();
             trayIconManager.ShowError("DimToOff", "Failed to restore brightness. See the log for details.");
+
+            lock (stateLock)
+            {
+                suppressAutoOffUntil = DateTimeOffset.Now.AddSeconds(10);
+                state = AppState.Idle;
+            }
+        }
+    }
+
+    private async Task RestoreFromBrightnessChangeAsync()
+    {
+        try
+        {
+            inputHookService.Stop();
+            blackoutService.Hide();
+            displayPowerService.AllowNormalSleepPolicy();
+
+            lock (stateLock)
+            {
+                state = AppState.Cooldown;
+                suppressAutoOffUntil = DateTimeOffset.Now.AddSeconds(2);
+            }
+
+            await Task.Delay(settings.CooldownMs);
+
+            lock (stateLock)
+            {
+                state = AppState.Idle;
+            }
+        }
+        catch (Exception ex)
+        {
+            log.Error("Failed to hide blackout after brightness returned", ex);
+            blackoutService.Hide();
+            displayPowerService.AllowNormalSleepPolicy();
 
             lock (stateLock)
             {
