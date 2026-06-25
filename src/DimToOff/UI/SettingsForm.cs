@@ -21,15 +21,15 @@ internal sealed class SettingsForm : Form
     private readonly ToggleSwitch enabledToggle;
     private readonly ToggleSwitch startWithWindowsToggle;
     private readonly ToggleSwitch showErrorsToggle;
-    private readonly ComboBox displayModeBox;
-    private readonly NumericUpDown thresholdBox;
-    private readonly NumericUpDown debounceBox;
-    private readonly NumericUpDown cooldownBox;
-    private readonly NumericUpDown ignoreInputBox;
-    private readonly NumericUpDown saveStableBox;
-    private readonly NumericUpDown fadeBox;
-    private readonly NumericUpDown minimumRestoreBox;
-    private readonly NumericUpDown defaultRestoreBox;
+    private readonly ChoiceField displayModeBox;
+    private readonly NumberField thresholdBox;
+    private readonly NumberField debounceBox;
+    private readonly NumberField cooldownBox;
+    private readonly NumberField ignoreInputBox;
+    private readonly NumberField saveStableBox;
+    private readonly NumberField fadeBox;
+    private readonly NumberField minimumRestoreBox;
+    private readonly NumberField defaultRestoreBox;
 
     public event EventHandler? SettingsSaved;
 
@@ -71,22 +71,25 @@ internal sealed class SettingsForm : Form
             WrapContents = false,
             AutoScroll = true,
             BackColor = PageBack,
-            Padding = new Padding(0, 0, 8, 0)
+            Padding = new Padding(0, 0, 4, 0)
         };
+        content.HorizontalScroll.Enabled = false;
+        content.HorizontalScroll.Visible = false;
+        content.Resize += (_, _) => ResizeContentChildren(content);
         root.Controls.Add(content, 0, 1);
 
         enabledToggle = new ToggleSwitch { Checked = settings.Enabled };
         startWithWindowsToggle = new ToggleSwitch { Checked = settings.StartWithWindows || startupService.IsEnabled() };
         showErrorsToggle = new ToggleSwitch { Checked = settings.ShowErrorNotifications };
-        displayModeBox = CreateComboBox(["Blackout", "MonitorPower"], settings.DisplayOffMode);
-        thresholdBox = CreateNumber(settings.OffThreshold, 0, 10, 1);
-        debounceBox = CreateNumber(settings.DebounceMs, 300, 2000, 100);
-        cooldownBox = CreateNumber(settings.CooldownMs, 1500, 5000, 100);
-        ignoreInputBox = CreateNumber(settings.IgnoreInputMs, 300, 2000, 100);
-        saveStableBox = CreateNumber(settings.BrightnessSaveStableMs, 1000, 10000, 250);
-        fadeBox = CreateNumber(settings.FadeToBlackMs, 0, 1200, 20);
-        minimumRestoreBox = CreateNumber(settings.MinimumRestoreBrightness, 30, 100, 1);
-        defaultRestoreBox = CreateNumber(settings.DefaultRestoreBrightness, 30, 100, 1);
+        displayModeBox = new ChoiceField(["Blackout", "MonitorPower"], settings.DisplayOffMode);
+        thresholdBox = new NumberField(settings.OffThreshold, 0, 10, 1, "%");
+        debounceBox = new NumberField(settings.DebounceMs, 300, 2000, 100, "ms");
+        cooldownBox = new NumberField(settings.CooldownMs, 1500, 5000, 100, "ms");
+        ignoreInputBox = new NumberField(settings.IgnoreInputMs, 300, 2000, 100, "ms");
+        saveStableBox = new NumberField(settings.BrightnessSaveStableMs, 1000, 10000, 250, "ms");
+        fadeBox = new NumberField(settings.FadeToBlackMs, 0, 1200, 20, "ms");
+        minimumRestoreBox = new NumberField(settings.MinimumRestoreBrightness, 30, 100, 1, "%");
+        defaultRestoreBox = new NumberField(settings.DefaultRestoreBrightness, 30, 100, 1, "%");
 
         AddSection(content, "General");
         AddRow(content, "Enable DimToOff", "Watch brightness changes and blank the screen at the threshold.", enabledToggle);
@@ -95,18 +98,19 @@ internal sealed class SettingsForm : Form
 
         AddSection(content, "Blanking");
         AddRow(content, "Mode", "Blackout keeps Windows awake and unlocked.", displayModeBox);
-        AddRow(content, "Off threshold", "Brightness at or below this value starts blanking.", thresholdBox, "%");
-        AddRow(content, "Fade to black", "Softens the moment the overlay appears.", fadeBox, "ms");
-        AddRow(content, "Ignore input after blank", "Filters touchpad noise right after the overlay appears.", ignoreInputBox, "ms");
+        AddRow(content, "Off threshold", "Brightness at or below this value starts blanking.", thresholdBox);
+        AddRow(content, "Fade to black", "Softens the moment the overlay appears.", fadeBox);
+        AddRow(content, "Ignore input after blank", "Filters touchpad noise right after the overlay appears.", ignoreInputBox);
 
         AddSection(content, "Timing");
-        AddRow(content, "Debounce", "Wait time before blanking after brightness reaches the threshold.", debounceBox, "ms");
-        AddRow(content, "Cooldown", "Prevents immediate re-triggering after restore.", cooldownBox, "ms");
-        AddRow(content, "Brightness save stable time", "Only stable brightness is remembered for restore.", saveStableBox, "ms");
+        AddRow(content, "Debounce", "Wait time before blanking after brightness reaches the threshold.", debounceBox);
+        AddRow(content, "Cooldown", "Prevents immediate re-triggering after restore.", cooldownBox);
+        AddRow(content, "Brightness save stable time", "Only stable brightness is remembered for restore.", saveStableBox);
 
         AddSection(content, "Restore");
-        AddRow(content, "Minimum restore brightness", "Restore brightness will never be lower than this.", minimumRestoreBox, "%");
-        AddRow(content, "Default restore brightness", "Used when no stable brightness has been learned yet.", defaultRestoreBox, "%");
+        AddRow(content, "Minimum restore brightness", "Restore brightness will never be lower than this.", minimumRestoreBox);
+        AddRow(content, "Default restore brightness", "Used when no stable brightness has been learned yet.", defaultRestoreBox);
+        ResizeContentChildren(content);
 
         root.Controls.Add(CreateFooter(), 0, 2);
     }
@@ -172,15 +176,15 @@ internal sealed class SettingsForm : Form
         settings.Enabled = enabledToggle.Checked;
         settings.StartWithWindows = startWithWindowsToggle.Checked;
         settings.ShowErrorNotifications = showErrorsToggle.Checked;
-        settings.DisplayOffMode = displayModeBox.SelectedItem?.ToString() ?? "Blackout";
-        settings.OffThreshold = (int)thresholdBox.Value;
-        settings.DebounceMs = (int)debounceBox.Value;
-        settings.CooldownMs = (int)cooldownBox.Value;
-        settings.IgnoreInputMs = (int)ignoreInputBox.Value;
-        settings.BrightnessSaveStableMs = (int)saveStableBox.Value;
-        settings.FadeToBlackMs = (int)fadeBox.Value;
-        settings.MinimumRestoreBrightness = (int)minimumRestoreBox.Value;
-        settings.DefaultRestoreBrightness = Math.Max((int)defaultRestoreBox.Value, settings.MinimumRestoreBrightness);
+        settings.DisplayOffMode = displayModeBox.SelectedValue;
+        settings.OffThreshold = thresholdBox.Value;
+        settings.DebounceMs = debounceBox.Value;
+        settings.CooldownMs = cooldownBox.Value;
+        settings.IgnoreInputMs = ignoreInputBox.Value;
+        settings.BrightnessSaveStableMs = saveStableBox.Value;
+        settings.FadeToBlackMs = fadeBox.Value;
+        settings.MinimumRestoreBrightness = minimumRestoreBox.Value;
+        settings.DefaultRestoreBrightness = Math.Max(defaultRestoreBox.Value, settings.MinimumRestoreBrightness);
 
         settingsService.Save(settings);
         startupService.SetEnabled(settings.StartWithWindows);
@@ -193,7 +197,7 @@ internal sealed class SettingsForm : Form
         content.Controls.Add(new Label
         {
             Text = text,
-            Width = 594,
+            Width = Math.Max(520, content.ClientSize.Width - 24),
             Height = 30,
             Margin = new Padding(0, 12, 0, 4),
             Font = new Font("Segoe UI Variable Text", 10F, FontStyle.Bold),
@@ -202,11 +206,11 @@ internal sealed class SettingsForm : Form
         });
     }
 
-    private static void AddRow(FlowLayoutPanel content, string title, string detail, Control editor, string? suffix = null)
+    private static void AddRow(FlowLayoutPanel content, string title, string detail, Control editor)
     {
-        var row = new RoundedPanel
+        var row = new SettingRow(title, detail, editor)
         {
-            Width = 594,
+            Width = Math.Max(520, content.ClientSize.Width - 24),
             Height = 72,
             Margin = new Padding(0, 0, 0, 8),
             BackColor = CardBack,
@@ -214,75 +218,29 @@ internal sealed class SettingsForm : Form
             Radius = 8
         };
 
-        var titleLabel = new Label
-        {
-            Text = title,
-            Location = new Point(18, 13),
-            Size = new Size(350, 22),
-            Font = new Font("Segoe UI Variable Text", 9.5F, FontStyle.Regular),
-            ForeColor = TextPrimary
-        };
-        row.Controls.Add(titleLabel);
-
-        var detailLabel = new Label
-        {
-            Text = detail,
-            Location = new Point(18, 37),
-            Size = new Size(370, 20),
-            Font = new Font("Segoe UI Variable Text", 8.25F),
-            ForeColor = TextSecondary
-        };
-        row.Controls.Add(detailLabel);
-
-        editor.Location = new Point(410, 20);
-        editor.Size = editor is ToggleSwitch ? new Size(46, 24) : new Size(128, 30);
-        row.Controls.Add(editor);
-
-        if (suffix is not null)
-        {
-            var suffixLabel = new Label
-            {
-                Text = suffix,
-                Location = new Point(544, 25),
-                Size = new Size(34, 22),
-                Font = new Font("Segoe UI Variable Text", 8.25F),
-                ForeColor = TextSecondary,
-                TextAlign = ContentAlignment.MiddleLeft
-            };
-            row.Controls.Add(suffixLabel);
-        }
-
         content.Controls.Add(row);
     }
 
-    private static ComboBox CreateComboBox(string[] values, string selectedValue)
+    private static void ResizeContentChildren(FlowLayoutPanel content)
     {
-        var box = new ComboBox
+        int width = Math.Max(520, content.ClientSize.Width - 24);
+        content.SuspendLayout();
+        foreach (Control child in content.Controls)
         {
-            DropDownStyle = ComboBoxStyle.DropDownList,
-            BackColor = Color.White,
-            ForeColor = TextPrimary,
-            FlatStyle = FlatStyle.System
-        };
-        box.Items.AddRange(values);
-        box.SelectedItem = values.FirstOrDefault(value =>
-            string.Equals(value, selectedValue, StringComparison.OrdinalIgnoreCase)) ?? values[0];
-        return box;
+            child.Width = width;
+            if (child is SettingRow row)
+            {
+                row.Reflow();
+            }
+        }
+
+        content.HorizontalScroll.Value = 0;
+        content.HorizontalScroll.Enabled = false;
+        content.HorizontalScroll.Visible = false;
+        content.ResumeLayout();
     }
 
-    private static NumericUpDown CreateNumber(int value, int min, int max, int increment) => new()
-    {
-        Minimum = min,
-        Maximum = max,
-        Value = Math.Clamp(value, min, max),
-        BackColor = Color.White,
-        ForeColor = TextPrimary,
-        BorderStyle = BorderStyle.FixedSingle,
-        Increment = increment,
-        TextAlign = HorizontalAlignment.Right
-    };
-
-    private sealed class RoundedPanel : Panel
+    private class RoundedPanel : Panel
     {
         public int Radius { get; set; } = 8;
         public Color BorderColor { get; set; } = Border;
@@ -296,6 +254,286 @@ internal sealed class SettingsForm : Form
             e.Graphics.FillRoundedRectangle(background, rect, Radius);
             e.Graphics.DrawRoundedRectangle(borderPen, rect, Radius);
         }
+    }
+
+    private sealed class SettingRow : RoundedPanel
+    {
+        private readonly Label titleLabel;
+        private readonly Label detailLabel;
+        private readonly Control editor;
+
+        public SettingRow(string title, string detail, Control editor)
+        {
+            this.editor = editor;
+            titleLabel = new Label
+            {
+                Text = title,
+                Font = new Font("Segoe UI", 9.25F),
+                ForeColor = TextPrimary,
+                AutoEllipsis = true
+            };
+            detailLabel = new Label
+            {
+                Text = detail,
+                Font = new Font("Segoe UI", 8.25F),
+                ForeColor = TextSecondary,
+                AutoEllipsis = true
+            };
+
+            Controls.Add(titleLabel);
+            Controls.Add(detailLabel);
+            Controls.Add(editor);
+            Reflow();
+        }
+
+        protected override void OnResize(EventArgs eventargs)
+        {
+            base.OnResize(eventargs);
+            Reflow();
+        }
+
+        public void Reflow()
+        {
+            int editorWidth = editor is ToggleSwitch ? 46 : 142;
+            int editorHeight = editor is ToggleSwitch ? 24 : 34;
+            int editorX = Math.Max(390, Width - editorWidth - 18);
+            int editorY = (Height - editorHeight) / 2;
+            editor.Bounds = new Rectangle(editorX, editorY, editorWidth, editorHeight);
+
+            int labelWidth = Math.Max(180, editorX - 36);
+            titleLabel.Bounds = new Rectangle(18, 13, labelWidth, 22);
+            detailLabel.Bounds = new Rectangle(18, 38, labelWidth, 20);
+        }
+    }
+
+    private sealed class ChoiceField : Control
+    {
+        private readonly string[] values;
+
+        public string SelectedValue { get; private set; }
+
+        public ChoiceField(string[] values, string selectedValue)
+        {
+            this.values = values;
+            SelectedValue = values.FirstOrDefault(value =>
+                string.Equals(value, selectedValue, StringComparison.OrdinalIgnoreCase)) ?? values[0];
+            Cursor = Cursors.Hand;
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+            Font = new Font("Segoe UI", 9F);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            e.Graphics.Clear(Parent?.BackColor ?? CardBack);
+            Rectangle rect = new(0, 0, Width - 1, Height - 1);
+            using var fill = new SolidBrush(Color.FromArgb(250, 250, 250));
+            using var border = new Pen(Border);
+            e.Graphics.FillRoundedRectangle(fill, rect, 7);
+            e.Graphics.DrawRoundedRectangle(border, rect, 7);
+
+            TextRenderer.DrawText(
+                e.Graphics,
+                SelectedValue,
+                Font,
+                new Rectangle(12, 0, Width - 38, Height),
+                TextPrimary,
+                TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
+
+            using var chevron = new Pen(TextSecondary, 1.7F)
+            {
+                StartCap = LineCap.Round,
+                EndCap = LineCap.Round
+            };
+            int cx = Width - 20;
+            int cy = Height / 2;
+            e.Graphics.DrawLine(chevron, cx - 4, cy - 2, cx, cy + 2);
+            e.Graphics.DrawLine(chevron, cx, cy + 2, cx + 4, cy - 2);
+        }
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            base.OnMouseDown(e);
+            ShowMenu();
+        }
+
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            base.OnKeyDown(e);
+            if (e.KeyCode is Keys.Enter or Keys.Space)
+            {
+                ShowMenu();
+            }
+        }
+
+        private void ShowMenu()
+        {
+            var menu = new ContextMenuStrip
+            {
+                Renderer = new LightMenuRenderer(),
+                BackColor = Color.White,
+                ForeColor = TextPrimary,
+                Padding = new Padding(6),
+                ShowImageMargin = false
+            };
+
+            foreach (string value in values)
+            {
+                var item = new ToolStripMenuItem(value)
+                {
+                    Checked = string.Equals(value, SelectedValue, StringComparison.OrdinalIgnoreCase),
+                    Padding = new Padding(10, 7, 18, 7),
+                    ForeColor = TextPrimary
+                };
+                item.Click += (_, _) =>
+                {
+                    SelectedValue = value;
+                    Invalidate();
+                };
+                menu.Items.Add(item);
+            }
+
+            menu.Show(this, new Point(0, Height + 4));
+        }
+    }
+
+    private sealed class NumberField : UserControl
+    {
+        private readonly int minimum;
+        private readonly int maximum;
+        private readonly int increment;
+        private readonly TextBox textBox;
+        private readonly Label suffixLabel;
+
+        public int Value { get; private set; }
+
+        public NumberField(int value, int minimum, int maximum, int increment, string suffix)
+        {
+            this.minimum = minimum;
+            this.maximum = maximum;
+            this.increment = increment;
+            Value = Math.Clamp(value, minimum, maximum);
+
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+            BackColor = CardBack;
+
+            textBox = new TextBox
+            {
+                BorderStyle = BorderStyle.None,
+                TextAlign = HorizontalAlignment.Right,
+                Text = Value.ToString(),
+                Font = new Font("Segoe UI", 9F),
+                BackColor = Color.FromArgb(250, 250, 250),
+                ForeColor = TextPrimary
+            };
+            textBox.KeyDown += (_, e) =>
+            {
+                if (e.KeyCode == Keys.Enter)
+                {
+                    CommitText();
+                    e.SuppressKeyPress = true;
+                }
+            };
+            textBox.Leave += (_, _) => CommitText();
+
+            suffixLabel = new Label
+            {
+                Text = suffix,
+                Font = textBox.Font,
+                ForeColor = TextSecondary,
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.FromArgb(250, 250, 250)
+            };
+
+            Controls.Add(textBox);
+            Controls.Add(suffixLabel);
+            Cursor = Cursors.IBeam;
+        }
+
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            int suffixWidth = suffixLabel.Text == "%" ? 22 : 30;
+            int textHeight = textBox.PreferredHeight;
+            int textY = (Height - textHeight) / 2;
+            textBox.Bounds = new Rectangle(10, textY, Width - suffixWidth - 18, textHeight);
+            suffixLabel.Bounds = new Rectangle(Width - suffixWidth - 8, 0, suffixWidth, Height);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            e.Graphics.Clear(Parent?.BackColor ?? CardBack);
+            Rectangle rect = new(0, 0, Width - 1, Height - 1);
+            using var fill = new SolidBrush(Color.FromArgb(250, 250, 250));
+            using var border = new Pen(textBox.Focused ? Accent : Border);
+            e.Graphics.FillRoundedRectangle(fill, rect, 7);
+            e.Graphics.DrawRoundedRectangle(border, rect, 7);
+        }
+
+        protected override void OnMouseWheel(MouseEventArgs e)
+        {
+            base.OnMouseWheel(e);
+            int direction = e.Delta > 0 ? 1 : -1;
+            SetValue(Value + direction * increment);
+        }
+
+        protected override void OnClick(EventArgs e)
+        {
+            base.OnClick(e);
+            textBox.Focus();
+            textBox.SelectAll();
+        }
+
+        private void CommitText()
+        {
+            if (int.TryParse(textBox.Text.Trim(), out int parsed))
+            {
+                SetValue(parsed);
+            }
+            else
+            {
+                textBox.Text = Value.ToString();
+            }
+        }
+
+        private void SetValue(int value)
+        {
+            Value = Math.Clamp(value, minimum, maximum);
+            textBox.Text = Value.ToString();
+            Invalidate();
+        }
+    }
+
+    private sealed class LightMenuRenderer : ToolStripProfessionalRenderer
+    {
+        public LightMenuRenderer()
+            : base(new LightColorTable())
+        {
+            RoundedEdges = true;
+        }
+
+        protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e)
+        {
+            Rectangle bounds = new(3, 1, e.Item.Width - 6, e.Item.Height - 2);
+            using var brush = new SolidBrush(e.Item.Selected ? Color.FromArgb(243, 243, 243) : Color.White);
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            e.Graphics.FillRoundedRectangle(brush, bounds, 6);
+        }
+
+        protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e)
+        {
+            using var pen = new Pen(Border);
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            e.Graphics.DrawRoundedRectangle(pen, new Rectangle(0, 0, e.ToolStrip.Width - 1, e.ToolStrip.Height - 1), 8);
+        }
+    }
+
+    private sealed class LightColorTable : ProfessionalColorTable
+    {
+        public override Color ToolStripDropDownBackground => Color.White;
+        public override Color MenuBorder => Border;
+        public override Color MenuItemSelected => Color.FromArgb(243, 243, 243);
     }
 
     private sealed class ToggleSwitch : CheckBox

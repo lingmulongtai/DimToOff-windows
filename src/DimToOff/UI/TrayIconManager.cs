@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Diagnostics;
 using System.Windows.Forms;
 using DimToOff.Models;
 using DimToOff.Services;
@@ -108,11 +109,11 @@ internal sealed class TrayIconManager : IDisposable
 
     private static void ShowAbout()
     {
-        MessageBox.Show(
-            "DimToOff\n\nTurns the display off when laptop brightness reaches the minimum threshold, then restores the last usable brightness after input.",
-            "About DimToOff",
-            MessageBoxButtons.OK,
-            MessageBoxIcon.Information);
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = "https://github.com/lingmulongtai/DimToOff-windows",
+            UseShellExecute = true
+        });
     }
 
     private static ToolStripMenuItem CreateItem(string text, Action action)
@@ -127,6 +128,7 @@ internal sealed class TrayIconManager : IDisposable
         item.BackColor = Color.FromArgb(32, 32, 36);
         item.Padding = new Padding(8, 7, 10, 7);
         item.Margin = new Padding(2, 1, 2, 1);
+        item.Font = new Font("Segoe UI", 9F);
         return item;
     }
 
@@ -242,6 +244,21 @@ internal sealed class TrayIconManager : IDisposable
             e.Graphics.FillRoundedRectangle(brush, box, 4);
             e.Graphics.DrawLine(pen, box.X + 4, box.Y + 7, box.X + 7, box.Y + 10);
             e.Graphics.DrawLine(pen, box.X + 7, box.Y + 10, box.X + 11, box.Y + 4);
+        }
+
+        protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
+        {
+            Rectangle textRect = e.TextRectangle;
+            textRect.Y = 0;
+            textRect.Height = e.Item.Height;
+            e.TextColor = Color.FromArgb(244, 244, 245);
+            TextRenderer.DrawText(
+                e.Graphics,
+                e.Text,
+                e.TextFont,
+                textRect,
+                e.TextColor,
+                TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
         }
 
         protected override void OnRenderSeparator(ToolStripSeparatorRenderEventArgs e)
