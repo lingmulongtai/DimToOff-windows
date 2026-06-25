@@ -22,6 +22,8 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
     private readonly Form messageWindow;
     private readonly int uiThreadId;
     private readonly object stateLock = new();
+    private readonly object winUiProcessLock = new();
+    private readonly List<Process> winUiProcesses = new();
     private CancellationTokenSource? debounceCts;
     private CancellationTokenSource? brightnessSaveCts;
     private AppState state = AppState.Idle;
@@ -166,16 +168,78 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             startInfo.ArgumentList.Add(UiCommandService.PipeName);
 
             Process? process = Process.Start(startInfo);
-            if (process is not null && reloadSettingsOnExit)
+            if (process is not null)
             {
                 process.EnableRaisingEvents = true;
-                process.Exited += (_, _) => QueueToUiThread(ReloadSettingsFromDisk);
+                TrackWinUiProcess(process);
+                if (reloadSettingsOnExit)
+                {
+                    process.Exited += (_, _) =>
+                    {
+                        if (!disposed)
+                        {
+                            QueueToUiThread(ReloadSettingsFromDisk);
+                        }
+                    };
+                }
             }
         }
         catch (Exception ex)
         {
             log.Error("Failed to launch WinUI surface", ex);
             trayIconManager.ShowError("DimToOff", "Failed to open the WinUI interface. See the log for details.");
+        }
+    }
+
+    private void TrackWinUiProcess(Process process)
+    {
+        lock (winUiProcessLock)
+        {
+            winUiProcesses.Add(process);
+        }
+
+        process.Exited += (_, _) =>
+        {
+            lock (winUiProcessLock)
+            {
+                winUiProcesses.Remove(process);
+            }
+        };
+    }
+
+    private void CloseWinUiSurfaces()
+    {
+        Process[] processes;
+        lock (winUiProcessLock)
+        {
+            processes = winUiProcesses.ToArray();
+            winUiProcesses.Clear();
+        }
+
+        foreach (Process process in processes)
+        {
+            try
+            {
+                if (process.HasExited)
+                {
+                    process.Dispose();
+                    continue;
+                }
+
+                if (process.CloseMainWindow() && process.WaitForExit(800))
+                {
+                    process.Dispose();
+                    continue;
+                }
+
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit(800);
+                process.Dispose();
+            }
+            catch (Exception ex)
+            {
+                log.Error("Failed to close WinUI surface during exit", ex);
+            }
         }
     }
 
@@ -642,6 +706,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             log.Info("DimToOff stopping");
             CancelPendingDisplayOff();
             CancelPendingBrightnessSave();
+            CloseWinUiSurfaces();
             brightnessService.BrightnessChanged -= OnBrightnessChanged;
             inputHookService.UserInputDetected -= OnUserInputDetected;
             blackoutService.UserInputDetected -= OnUserInputDetected;
