@@ -5,8 +5,6 @@ using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
-using Windows.Graphics;
 using WinRT.Interop;
 
 namespace DimToOff.Settings;
@@ -19,6 +17,7 @@ public sealed partial class TrayMenuWindow : Window
     private readonly TrayCommandClient commandClient;
     private readonly SettingsStore settingsStore = new();
     private readonly string mainExecutablePath;
+    private OutsideClickDismissService? outsideClickDismissService;
     private AppSettings settings = new();
     private bool activatedOnce;
 
@@ -37,22 +36,20 @@ public sealed partial class TrayMenuWindow : Window
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(MenuRoot);
 
-        try
-        {
-            SystemBackdrop = new MicaBackdrop();
-        }
-        catch
-        {
-        }
-
         IntPtr windowHandle = WindowNative.GetWindowHandle(this);
         WindowId windowId = Win32Interop.GetWindowIdFromWindow(windowHandle);
         AppWindow appWindow = AppWindow.GetFromWindowId(windowId);
         appWindow.Title = "DimToOff";
         NativeWindow.MakeBorderlessToolWindow(windowHandle);
         NativeWindow.MoveNearCursorForDips(windowHandle, appWindow, MenuWidth, MenuHeight);
+        NativeWindow.ApplyRoundedRegionForDips(windowHandle, MenuWidth, MenuHeight, 8);
+        outsideClickDismissService = new OutsideClickDismissService(
+            windowHandle,
+            () => DispatcherQueue.TryEnqueue(Close));
+        outsideClickDismissService.Start();
 
         Activated += OnActivated;
+        Closed += OnClosed;
     }
 
     private void ApplyCurrentState()
@@ -74,6 +71,12 @@ public sealed partial class TrayMenuWindow : Window
         {
             activatedOnce = true;
         }
+    }
+
+    private void OnClosed(object sender, WindowEventArgs args)
+    {
+        outsideClickDismissService?.Dispose();
+        outsideClickDismissService = null;
     }
 
     private async void EnabledButton_Click(object sender, RoutedEventArgs e)

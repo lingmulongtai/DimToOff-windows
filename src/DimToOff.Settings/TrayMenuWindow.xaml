@@ -10,7 +10,7 @@
         x:Name="MenuRoot"
         Width="286"
         Height="334"
-        Background="Transparent"
+        Background="#2B2B2B"
         RequestedTheme="Dark">
         <Grid.Resources>
             <Style x:Key="MenuButtonStyle" TargetType="Button">
@@ -27,7 +27,6 @@
         </Grid.Resources>
 
         <Border
-            Margin="6"
             Padding="4"
             CornerRadius="8"
             Background="#F02B2B2B"

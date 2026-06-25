@@ -29,7 +29,6 @@ internal sealed class TrayIconManager : IDisposable
         };
 
         notifyIcon.MouseUp += OnMouseUp;
-        notifyIcon.DoubleClick += (_, _) => SettingsRequested?.Invoke(this, EventArgs.Empty);
     }
 
     public void ShowError(string title, string message)
@@ -55,6 +54,10 @@ internal sealed class TrayIconManager : IDisposable
         {
             TrayMenuRequested?.Invoke(this, EventArgs.Empty);
         }
+        else if (e.Button == MouseButtons.Left)
+        {
+            SettingsRequested?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     public void Dispose()
@@ -77,16 +80,45 @@ internal sealed class TrayIconManager : IDisposable
         graphics.SmoothingMode = SmoothingMode.AntiAlias;
         graphics.Clear(Color.Transparent);
 
-        using var accentBrush = new SolidBrush(Color.FromArgb(76, 194, 255));
-        using var darkBrush = new SolidBrush(Color.FromArgb(14, 14, 18));
-        using var softBrush = new SolidBrush(Color.FromArgb(230, 255, 255, 255));
+        using var glowPen = new Pen(Color.FromArgb(80, 0, 0, 0), 4F)
+        {
+            StartCap = LineCap.Round,
+            EndCap = LineCap.Round,
+            LineJoin = LineJoin.Round
+        };
+        using var monitorPen = new Pen(Color.White, 2.6F)
+        {
+            StartCap = LineCap.Round,
+            EndCap = LineCap.Round,
+            LineJoin = LineJoin.Round
+        };
+        using var standPen = new Pen(Color.White, 2.4F)
+        {
+            StartCap = LineCap.Round,
+            EndCap = LineCap.Round
+        };
 
-        using var crescentRegion = new Region(new Rectangle(7, 5, 18, 18));
-        crescentRegion.Exclude(new Rectangle(14, 2, 18, 18));
-        graphics.FillRegion(accentBrush, crescentRegion);
-        graphics.FillEllipse(darkBrush, 12, 16, 11, 11);
-        graphics.FillEllipse(softBrush, 16, 20, 3, 3);
+        var monitorBounds = new RectangleF(5.5F, 7.5F, 21F, 13.5F);
+        using GraphicsPath monitorPath = CreateRoundedRectanglePath(monitorBounds, 3.5F);
+        graphics.DrawPath(glowPen, monitorPath);
+        graphics.DrawPath(monitorPen, monitorPath);
+        graphics.DrawLine(glowPen, 16F, 21F, 16F, 24.5F);
+        graphics.DrawLine(glowPen, 11.5F, 25F, 20.5F, 25F);
+        graphics.DrawLine(standPen, 16F, 21F, 16F, 24.5F);
+        graphics.DrawLine(standPen, 11.5F, 25F, 20.5F, 25F);
 
         return Icon.FromHandle(bitmap.GetHicon());
+    }
+
+    private static GraphicsPath CreateRoundedRectanglePath(RectangleF bounds, float radius)
+    {
+        float diameter = radius * 2F;
+        var path = new GraphicsPath();
+        path.AddArc(bounds.X, bounds.Y, diameter, diameter, 180, 90);
+        path.AddArc(bounds.Right - diameter, bounds.Y, diameter, diameter, 270, 90);
+        path.AddArc(bounds.Right - diameter, bounds.Bottom - diameter, diameter, diameter, 0, 90);
+        path.AddArc(bounds.X, bounds.Bottom - diameter, diameter, diameter, 90, 90);
+        path.CloseFigure();
+        return path;
     }
 }

@@ -13,6 +13,10 @@ namespace DimToOff.Settings;
 
 public sealed partial class MainWindow : Window
 {
+    private const int SettingsWindowHeightDips = 820;
+    private const int SettingsWindowMinimumWidthDips = 760;
+    private const int SettingsWindowOuterPaddingDips = 56;
+
     private readonly SettingsStore settingsStore = new();
     private readonly TrayCommandClient commandClient;
     private readonly string mainExecutablePath;
@@ -51,13 +55,18 @@ public sealed partial class MainWindow : Window
         WindowId windowId = Win32Interop.GetWindowIdFromWindow(windowHandle);
         AppWindow appWindow = AppWindow.GetFromWindowId(windowId);
         appWindow.Title = "DimToOff Settings";
-        NativeWindow.ResizeForDips(windowHandle, appWindow, 940, 820);
+        int windowWidthDips = Math.Max(
+            SettingsWindowMinimumWidthDips,
+            (int)Math.Ceiling(ContentColumn.Width + SettingsWindowOuterPaddingDips));
+        NativeWindow.ResizeForDips(windowHandle, appWindow, windowWidthDips, SettingsWindowHeightDips);
 
         if (appWindow.Presenter is OverlappedPresenter presenter)
         {
             presenter.IsResizable = true;
             presenter.IsMaximizable = false;
         }
+
+        DispatcherQueue.TryEnqueue(() => NativeWindow.BringToFront(windowHandle));
     }
 
     private void ApplySettingsToControls()
