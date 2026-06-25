@@ -1,3 +1,5 @@
+using System.Drawing;
+using System.Windows.Forms;
 using DimToOff.Models;
 using DimToOff.Services;
 using DimToOff.UI;
@@ -13,6 +15,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
     private readonly DisplayPowerService displayPowerService;
     private readonly InputHookService inputHookService;
     private readonly TrayIconManager trayIconManager;
+    private readonly Form messageWindow;
     private readonly object stateLock = new();
     private CancellationTokenSource? debounceCts;
     private AppState state = AppState.Idle;
@@ -31,6 +34,8 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         displayPowerService = new DisplayPowerService(log);
         inputHookService = new InputHookService(log);
         trayIconManager = new TrayIconManager(settings, settingsService);
+        messageWindow = new HiddenMessageWindow();
+        messageWindow.CreateControl();
 
         brightnessService.BrightnessChanged += OnBrightnessChanged;
         inputHookService.UserInputDetected += OnUserInputDetected;
@@ -106,7 +111,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
                 int? current = brightnessService.GetCurrentBrightness();
                 if (current.HasValue && current.Value <= settings.OffThreshold)
                 {
-                    BeginInvokeOnUiThread(TurnDisplayOffByApp);
+                    PostToUiThread(TurnDisplayOffByApp);
                     return;
                 }
 
@@ -170,7 +175,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             state = AppState.RestoringBrightness;
         }
 
-        BeginInvokeOnUiThread(async () => await RestoreBrightnessAfterWakeAsync());
+        PostToUiThread(async () => await RestoreBrightnessAfterWakeAsync());
     }
 
     private async Task RestoreBrightnessAfterWakeAsync()
@@ -238,11 +243,11 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         debounceCts = null;
     }
 
-    private static void BeginInvokeOnUiThread(Action action)
+    private void PostToUiThread(Action action)
     {
-        if (Application.OpenForms.Count > 0)
+        if (messageWindow.IsHandleCreated && messageWindow.InvokeRequired)
         {
-            Application.OpenForms[0].BeginInvoke(action);
+            messageWindow.BeginInvoke(action);
             return;
         }
 
@@ -273,9 +278,26 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             brightnessService.Dispose();
             inputHookService.Dispose();
             trayIconManager.Dispose();
+            messageWindow.Dispose();
             log.Info("DimToOff stopped");
         }
 
         base.Dispose(disposing);
+    }
+
+    private sealed class HiddenMessageWindow : Form
+    {
+        public HiddenMessageWindow()
+        {
+            ShowInTaskbar = false;
+            FormBorderStyle = FormBorderStyle.FixedToolWindow;
+            StartPosition = FormStartPosition.Manual;
+            Size = new Size(1, 1);
+        }
+
+        protected override void SetVisibleCore(bool value)
+        {
+            base.SetVisibleCore(false);
+        }
     }
 }

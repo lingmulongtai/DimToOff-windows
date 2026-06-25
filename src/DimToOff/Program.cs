@@ -1,3 +1,4 @@
+using System.Windows.Forms;
 using DimToOff.Services;
 
 namespace DimToOff;
@@ -14,7 +15,8 @@ internal static class Program
             return;
         }
 
-        ApplicationConfiguration.Initialize();
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
 
         Application.ThreadException += (_, e) =>
         {
