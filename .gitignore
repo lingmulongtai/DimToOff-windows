@@ -2,5 +2,8 @@ bin/
 obj/
 .vs/
 release/
+publish/
+*.zip
+*.zip.sha256
 *.user
 *.suo

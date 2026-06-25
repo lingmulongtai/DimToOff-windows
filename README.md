@@ -7,6 +7,7 @@ DimToOff is a Windows tray utility for laptops. When the built-in display bright
 - Windows 10 or Windows 11
 - Laptop built-in display with WMI brightness support
 - .NET 8 SDK for building
+- Windows App SDK packages are restored automatically for the WinUI 3 interface
 - No administrator privileges required
 
 ## Best-Fit Displays
@@ -48,15 +49,34 @@ For a release build:
 dotnet build -c Release
 ```
 
+The solution contains two executables:
+
+- `DimToOff.exe`: the tray resident app and display/brightness controller
+- `DimToOff.Settings.exe`: the WinUI 3 settings window and tray quick panel
+
+For a local self-contained Windows x64 publish, place both executables in the same output folder:
+
+```powershell
+dotnet publish .\src\DimToOff\DimToOff.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=false -o .\publish\win-x64
+dotnet publish .\src\DimToOff.Settings\DimToOff.Settings.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:PublishReadyToRun=false -o .\publish\win-x64
+```
+
 ## Run
 
 From the repository root:
 
 ```powershell
+dotnet build
 dotnet run --project .\src\DimToOff\DimToOff.csproj
 ```
 
-The app appears in the Windows notification area as `DimToOff`.
+The app appears in the Windows notification area as `DimToOff`. Build the full solution before running from source so the WinUI 3 settings app is available to the tray process.
+
+From a published build, run:
+
+```powershell
+.\publish\win-x64\DimToOff.exe
+```
 
 ## Use
 
@@ -66,7 +86,7 @@ The app appears in the Windows notification area as `DimToOff`.
 4. Press a key, move/click the mouse, or use the touchpad.
 5. After Windows wakes the display, DimToOff restores the last brightness above the threshold.
 
-Right-click the tray icon for:
+Right-click the tray icon to open the WinUI 3 quick panel for:
 
 - Enable/disable DimToOff
 - Turn Off Display Now
@@ -92,21 +112,25 @@ Default values:
 
 ```json
 {
-  "enabled": true,
-  "offThreshold": 1,
-  "debounceMs": 800,
-  "cooldownMs": 1500,
-  "ignoreInputMs": 300,
-  "brightnessSaveStableMs": 2500,
-  "fadeToBlackMs": 280,
-  "displayOffMode": "Blackout",
-  "restoreMode": "LastUsableWithMinimum",
-  "minimumRestoreBrightness": 30,
-  "defaultRestoreBrightness": 50
+  "Enabled": true,
+  "OffThreshold": 1,
+  "DebounceMs": 800,
+  "CooldownMs": 1500,
+  "IgnoreInputMs": 300,
+  "BrightnessSaveStableMs": 2500,
+  "FadeToBlackMs": 280,
+  "DisplayOffMode": "Blackout",
+  "RestoreMode": "LastUsableWithMinimum",
+  "MinimumRestoreBrightness": 30,
+  "DefaultRestoreBrightness": 50,
+  "StartWithWindows": false,
+  "ShowErrorNotifications": true,
+  "DisableWhileFullscreen": false,
+  "DisableWhenExternalMonitorConnected": false
 }
 ```
 
-The settings screen can edit these values. `Start with Windows` uses the current user's Run key and does not require administrator privileges.
+The WinUI 3 settings screen can edit these values. `Start with Windows` uses the current user's Run key and does not require administrator privileges.
 
 ## Logs
 

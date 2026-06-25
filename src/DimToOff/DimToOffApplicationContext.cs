@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Drawing;
 using System.Windows.Forms;
 using DimToOff.Models;
@@ -16,6 +17,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
     private readonly DisplayPowerService displayPowerService;
     private readonly InputHookService inputHookService;
     private readonly BlackoutService blackoutService;
+    private readonly UiCommandService uiCommandService;
     private readonly TrayIconManager trayIconManager;
     private readonly Form messageWindow;
     private readonly int uiThreadId;
@@ -43,6 +45,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         displayPowerService = new DisplayPowerService(log);
         inputHookService = new InputHookService(log);
         blackoutService = new BlackoutService(log);
+        uiCommandService = new UiCommandService(log);
         trayIconManager = new TrayIconManager(settings, settingsService);
         messageWindow = new HiddenMessageWindow();
         _ = messageWindow.Handle;
@@ -50,20 +53,13 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         brightnessService.BrightnessChanged += OnBrightnessChanged;
         inputHookService.UserInputDetected += OnUserInputDetected;
         blackoutService.UserInputDetected += OnUserInputDetected;
-        trayIconManager.TurnOffDisplayRequested += (_, _) => TurnDisplayOffByApp();
-        trayIconManager.RestoreBrightnessRequested += async (_, _) => await RestoreBrightnessAfterWakeAsync();
         trayIconManager.SettingsRequested += (_, _) => ShowSettings();
-        trayIconManager.StartWithWindowsChanged += (_, enabled) =>
-        {
-            startupService.SetEnabled(enabled);
-            settings.StartWithWindows = startupService.IsEnabled();
-            settingsService.Save(settings);
-            trayIconManager.RefreshSettings();
-        };
-        trayIconManager.ExitRequested += (_, _) => ExitThread();
+        trayIconManager.TrayMenuRequested += (_, _) => ShowTrayMenu();
+        uiCommandService.CommandReceived += OnUiCommandReceived;
 
         log.Info("DimToOff started");
         InitializeBrightness();
+        uiCommandService.Start();
         brightnessService.StartWatching();
     }
 
@@ -139,14 +135,180 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
 
     private void ShowSettings()
     {
-        using var form = new SettingsForm(settings, settingsService, startupService);
-        form.SettingsSaved += (_, _) =>
+        LaunchWinUiSurface("--settings", reloadSettingsOnExit: true);
+    }
+
+    private void ShowTrayMenu()
+    {
+        LaunchWinUiSurface("--tray-menu", reloadSettingsOnExit: false);
+    }
+
+    private void LaunchWinUiSurface(string mode, bool reloadSettingsOnExit)
+    {
+        string? settingsAppPath = ResolveSettingsAppPath();
+        if (settingsAppPath is null)
         {
-            settings.StartWithWindows = startupService.IsEnabled();
-            settingsService.Save(settings);
-            trayIconManager.RefreshSettings();
-        };
-        form.ShowDialog();
+            trayIconManager.ShowError("DimToOff", "The WinUI settings app could not be found. Build or publish the full solution.");
+            return;
+        }
+
+        try
+        {
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = settingsAppPath,
+                UseShellExecute = false
+            };
+            startInfo.ArgumentList.Add(mode);
+            startInfo.ArgumentList.Add("--main-exe");
+            startInfo.ArgumentList.Add(Application.ExecutablePath);
+            startInfo.ArgumentList.Add("--pipe");
+            startInfo.ArgumentList.Add(UiCommandService.PipeName);
+
+            Process? process = Process.Start(startInfo);
+            if (process is not null && reloadSettingsOnExit)
+            {
+                process.EnableRaisingEvents = true;
+                process.Exited += (_, _) => QueueToUiThread(ReloadSettingsFromDisk);
+            }
+        }
+        catch (Exception ex)
+        {
+            log.Error("Failed to launch WinUI surface", ex);
+            trayIconManager.ShowError("DimToOff", "Failed to open the WinUI interface. See the log for details.");
+        }
+    }
+
+    private static string? ResolveSettingsAppPath()
+    {
+        string sameFolderPath = Path.Combine(AppContext.BaseDirectory, "DimToOff.Settings.exe");
+        if (File.Exists(sameFolderPath))
+        {
+            return sameFolderPath;
+        }
+
+#if DEBUG
+        const string configuration = "Debug";
+#else
+        const string configuration = "Release";
+#endif
+        string projectOutputPath = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..",
+            "..",
+            "..",
+            "..",
+            "DimToOff.Settings",
+            "bin",
+            configuration,
+            "net8.0-windows10.0.19041.0",
+            "DimToOff.Settings.exe"));
+
+        if (File.Exists(projectOutputPath))
+        {
+            return projectOutputPath;
+        }
+
+        string ridOutputPath = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..",
+            "..",
+            "..",
+            "..",
+            "DimToOff.Settings",
+            "bin",
+            configuration,
+            "net8.0-windows10.0.19041.0",
+            "win-x64",
+            "DimToOff.Settings.exe"));
+
+        return File.Exists(ridOutputPath) ? ridOutputPath : null;
+    }
+
+    private void OnUiCommandReceived(object? sender, string command)
+    {
+        QueueToUiThread(() => HandleUiCommand(command));
+    }
+
+    private void HandleUiCommand(string command)
+    {
+        string[] parts = command.Split('=', 2, StringSplitOptions.TrimEntries);
+        string name = parts[0].ToLowerInvariant();
+        string value = parts.Length > 1 ? parts[1] : string.Empty;
+
+        switch (name)
+        {
+            case "blank":
+                TurnDisplayOffByApp();
+                break;
+            case "restore":
+                _ = RestoreBrightnessAfterWakeAsync();
+                break;
+            case "settings":
+                ShowSettings();
+                break;
+            case "reload-settings":
+                ReloadSettingsFromDisk();
+                break;
+            case "set-enabled" when bool.TryParse(value, out bool enabled):
+                settings.Enabled = enabled;
+                settingsService.Save(settings);
+                trayIconManager.RefreshSettings();
+                break;
+            case "set-startup" when bool.TryParse(value, out bool startWithWindows):
+                startupService.SetEnabled(startWithWindows);
+                settings.StartWithWindows = startupService.IsEnabled();
+                settingsService.Save(settings);
+                trayIconManager.RefreshSettings();
+                break;
+            case "about":
+                OpenGitHub();
+                break;
+            case "exit":
+                ExitThread();
+                break;
+            default:
+                log.Info($"Unknown UI command ignored: {command}");
+                break;
+        }
+    }
+
+    private void ReloadSettingsFromDisk()
+    {
+        AppSettings updated = settingsService.Load();
+        updated.StartWithWindows = startupService.IsEnabled();
+        ApplySettings(updated);
+        settingsService.Save(settings);
+        trayIconManager.RefreshSettings();
+        log.Info("Settings reloaded from WinUI");
+    }
+
+    private void ApplySettings(AppSettings updated)
+    {
+        settings.Enabled = updated.Enabled;
+        settings.OffThreshold = updated.OffThreshold;
+        settings.DebounceMs = updated.DebounceMs;
+        settings.CooldownMs = updated.CooldownMs;
+        settings.IgnoreInputMs = updated.IgnoreInputMs;
+        settings.BrightnessSaveStableMs = updated.BrightnessSaveStableMs;
+        settings.FadeToBlackMs = updated.FadeToBlackMs;
+        settings.DisplayOffMode = updated.DisplayOffMode;
+        settings.RestoreMode = updated.RestoreMode;
+        settings.MinimumRestoreBrightness = updated.MinimumRestoreBrightness;
+        settings.DefaultRestoreBrightness = updated.DefaultRestoreBrightness;
+        settings.StartWithWindows = updated.StartWithWindows;
+        settings.ShowErrorNotifications = updated.ShowErrorNotifications;
+        settings.DisableWhileFullscreen = updated.DisableWhileFullscreen;
+        settings.DisableWhenExternalMonitorConnected = updated.DisableWhenExternalMonitorConnected;
+    }
+
+    private static void OpenGitHub()
+    {
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = "https://github.com/lingmulongtai/DimToOff-windows",
+            UseShellExecute = true
+        });
     }
 
     private void StartDebounceTimer()
@@ -483,6 +645,8 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             brightnessService.BrightnessChanged -= OnBrightnessChanged;
             inputHookService.UserInputDetected -= OnUserInputDetected;
             blackoutService.UserInputDetected -= OnUserInputDetected;
+            uiCommandService.CommandReceived -= OnUiCommandReceived;
+            uiCommandService.Dispose();
             blackoutService.Dispose();
             displayPowerService.AllowNormalSleepPolicy();
             brightnessService.Dispose();
