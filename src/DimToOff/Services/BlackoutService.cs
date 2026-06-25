@@ -1,14 +1,16 @@
 using System.Drawing;
 using System.Windows.Forms;
+using DimToOff.Native;
 
 namespace DimToOff.Services;
 
 internal sealed class BlackoutService : IDisposable
 {
     private readonly LogService log;
-    private readonly List<BlackoutForm> forms = [];
+    private BlackoutForm? form;
     private bool cursorHidden;
     private bool disposed;
+    private DateTimeOffset shownAt;
 
     public event EventHandler? UserInputDetected;
 
@@ -19,39 +21,31 @@ internal sealed class BlackoutService : IDisposable
 
     public void Show()
     {
-        if (forms.Count > 0)
+        if (form is not null)
         {
             return;
         }
 
-        foreach (Screen screen in Screen.AllScreens)
-        {
-            var form = new BlackoutForm(screen.Bounds);
-            form.UserInputDetected += OnFormUserInputDetected;
-            forms.Add(form);
-            form.Show();
-        }
-
-        if (forms.Count > 0)
-        {
-            forms[0].Activate();
-        }
+        shownAt = DateTimeOffset.Now;
+        form = new BlackoutForm(SystemInformation.VirtualScreen);
+        form.UserInputDetected += OnFormUserInputDetected;
+        form.Show();
+        form.ForceTopMost();
 
         Cursor.Hide();
         cursorHidden = true;
-        log.Info($"Blackout shown on {forms.Count} screen(s)");
+        log.Info("Blackout shown");
     }
 
     public void Hide()
     {
-        foreach (BlackoutForm form in forms.ToArray())
+        if (form is not null)
         {
             form.UserInputDetected -= OnFormUserInputDetected;
             form.Close();
             form.Dispose();
+            form = null;
         }
-
-        forms.Clear();
 
         if (cursorHidden)
         {
@@ -64,6 +58,12 @@ internal sealed class BlackoutService : IDisposable
 
     private void OnFormUserInputDetected(object? sender, EventArgs e)
     {
+        if ((DateTimeOffset.Now - shownAt).TotalMilliseconds < 350)
+        {
+            return;
+        }
+
+        log.Info("User input detected by blackout overlay");
         UserInputDetected?.Invoke(this, EventArgs.Empty);
     }
 
@@ -94,9 +94,37 @@ internal sealed class BlackoutService : IDisposable
             WindowState = FormWindowState.Normal;
         }
 
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                CreateParams cp = base.CreateParams;
+                cp.ExStyle |= NativeConstants.WS_EX_TOPMOST | NativeConstants.WS_EX_TOOLWINDOW;
+                return cp;
+            }
+        }
+
         protected override void OnShown(EventArgs e)
         {
             base.OnShown(e);
+            ForceTopMost();
+            Activate();
+            Focus();
+        }
+
+        public void ForceTopMost()
+        {
+            User32.ShowWindow(Handle, NativeConstants.SW_SHOWNORMAL);
+            User32.SetWindowPos(
+                Handle,
+                User32.HwndTopmost,
+                Bounds.X,
+                Bounds.Y,
+                Bounds.Width,
+                Bounds.Height,
+                NativeConstants.SWP_SHOWWINDOW);
+            User32.SetForegroundWindow(Handle);
+            BringToFront();
             Activate();
             Focus();
         }
