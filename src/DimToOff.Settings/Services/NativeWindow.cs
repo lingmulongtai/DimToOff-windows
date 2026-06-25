@@ -86,7 +86,7 @@ internal static class NativeWindow
     private static SizeInt32 ToPhysicalSize(IntPtr hwnd, int widthDips, int heightDips) =>
         new(ToPhysicalPixels(hwnd, widthDips), ToPhysicalPixels(hwnd, heightDips));
 
-    private static int ToPhysicalPixels(IntPtr hwnd, int dips)
+    public static int ToPhysicalPixels(IntPtr hwnd, int dips)
     {
         uint dpi = GetDpiForWindow(hwnd);
         if (dpi == 0)

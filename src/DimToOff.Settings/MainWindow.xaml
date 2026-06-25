@@ -7,7 +7,7 @@
     mc:Ignorable="d">
 
     <Grid
-        MinWidth="760"
+        MinWidth="744"
         MinHeight="620"
         Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
         <Grid.Resources>
@@ -109,10 +109,6 @@
                 HorizontalAlignment="Left">
 
                 <Grid ColumnSpacing="16" Margin="0,0,0,8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
                     <StackPanel Spacing="4">
                         <TextBlock
                             Text="Settings"
@@ -124,21 +120,6 @@
                             FontSize="13"
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
-                    <Border
-                        Grid.Column="1"
-                        Height="32"
-                        Padding="12,0"
-                        CornerRadius="16"
-                        Background="{ThemeResource SystemFillColorSuccessBackgroundBrush}"
-                        VerticalAlignment="Top">
-                        <TextBlock
-                            x:Name="StatusText"
-                            Text="Ready"
-                            FontSize="12"
-                            FontWeight="SemiBold"
-                            Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                            VerticalAlignment="Center" />
-                    </Border>
                 </Grid>
 
                 <TextBlock Text="General" Style="{StaticResource SectionTitleStyle}" />
@@ -161,8 +142,7 @@
                             OnContent=""
                             OffContent=""
                             VerticalAlignment="Center"
-                            HorizontalAlignment="Right"
-                            Toggled="EnabledToggle_Toggled" />
+                            HorizontalAlignment="Right" />
                     </Grid>
                 </Border>
 
@@ -456,24 +436,33 @@
             BorderThickness="0,1,0,0">
             <Grid Padding="28,14" ColumnSpacing="16">
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
+                <Button
+                    Content="GitHub"
+                    Click="GitHubButton_Click"
+                    HorizontalAlignment="Left"
+                    BorderBrush="#164C8F"
+                    BorderThickness="1" />
+
                 <InfoBar
                     x:Name="SaveInfoBar"
+                    Grid.Column="1"
                     IsOpen="False"
                     IsClosable="True"
                     Severity="Success"
                     VerticalAlignment="Center"
+                    HorizontalAlignment="Stretch"
                     MaxWidth="420" />
 
                 <StackPanel
-                    Grid.Column="1"
+                    Grid.Column="2"
                     Orientation="Horizontal"
                     Spacing="10"
                     HorizontalAlignment="Right">
-                    <Button Content="GitHub" Click="GitHubButton_Click" />
                     <Button Content="Close" Click="CloseButton_Click" />
                     <Button
                         Content="Save"

@@ -14,8 +14,9 @@ namespace DimToOff.Settings;
 public sealed partial class MainWindow : Window
 {
     private const int SettingsWindowHeightDips = 820;
-    private const int SettingsWindowMinimumWidthDips = 760;
-    private const int SettingsWindowOuterPaddingDips = 56;
+    private const int SettingsWindowMinimumWidthDips = 744;
+    private const int SettingsWindowMinimumHeightDips = 620;
+    private const int SettingsWindowOuterPaddingDips = 40;
 
     private readonly SettingsStore settingsStore = new();
     private readonly TrayCommandClient commandClient;
@@ -35,7 +36,6 @@ public sealed partial class MainWindow : Window
         ConfigureWindow();
         ApplySettingsToControls();
         UpdateModeState();
-        UpdateStatus();
     }
 
     private void ConfigureWindow()
@@ -65,6 +65,24 @@ public sealed partial class MainWindow : Window
             presenter.IsResizable = true;
             presenter.IsMaximizable = false;
         }
+
+        int minimumWidth = NativeWindow.ToPhysicalPixels(windowHandle, SettingsWindowMinimumWidthDips);
+        int minimumHeight = NativeWindow.ToPhysicalPixels(windowHandle, SettingsWindowMinimumHeightDips);
+        appWindow.Changed += (_, args) =>
+        {
+            if (!args.DidSizeChange)
+            {
+                return;
+            }
+
+            SizeInt32 currentSize = appWindow.Size;
+            int width = Math.Max(currentSize.Width, minimumWidth);
+            int height = Math.Max(currentSize.Height, minimumHeight);
+            if (width != currentSize.Width || height != currentSize.Height)
+            {
+                appWindow.Resize(new SizeInt32(width, height));
+            }
+        };
 
         DispatcherQueue.TryEnqueue(() => NativeWindow.BringToFront(windowHandle));
     }
@@ -100,7 +118,6 @@ public sealed partial class MainWindow : Window
             SaveInfoBar.Message = "DimToOff will use these settings immediately after the tray app reloads them.";
             SaveInfoBar.Severity = InfoBarSeverity.Success;
             SaveInfoBar.IsOpen = true;
-            UpdateStatus();
         }
         catch (Exception ex)
         {
@@ -123,11 +140,6 @@ public sealed partial class MainWindow : Window
             FileName = "https://github.com/lingmulongtai/DimToOff-windows",
             UseShellExecute = true
         });
-    }
-
-    private void EnabledToggle_Toggled(object sender, RoutedEventArgs e)
-    {
-        UpdateStatus();
     }
 
     private void DisplayModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -158,11 +170,6 @@ public sealed partial class MainWindow : Window
             DisableWhileFullscreen = settings.DisableWhileFullscreen,
             DisableWhenExternalMonitorConnected = settings.DisableWhenExternalMonitorConnected
         };
-    }
-
-    private void UpdateStatus()
-    {
-        StatusText.Text = EnabledToggle.IsOn ? "Enabled" : "Paused";
     }
 
     private void UpdateModeState()
