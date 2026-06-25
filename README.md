@@ -13,7 +13,8 @@ DimToOff is a Windows tray utility for laptops. When the built-in display bright
 
 - Watches `WmiMonitorBrightnessEvent` in `root\wmi`.
 - Treats brightness `<= 1%` as the MVP off trigger.
-- Debounces the trigger for 800 ms, then sends `WM_SYSCOMMAND / SC_MONITORPOWER` to turn the display off.
+- Debounces the trigger for 800 ms, then shows a fullscreen black blanking layer by default. This keeps Windows unlocked and awake, so audio and normal background work continue.
+- `WM_SYSCOMMAND / SC_MONITORPOWER` remains available as `DisplayOffMode: "MonitorPower"` in settings, but it is not the default because some laptops route it into lock or Modern Standby behavior.
 - Installs low-level keyboard and mouse hooks only while the display is off by the app.
 - Restores `lastUsableBrightness`, never the minimum brightness value itself.
 - Remembers only a usable brightness level at or above `minimumRestoreBrightness`, so the last tiny step before display-off is not used as the restore target.
@@ -84,6 +85,7 @@ Default values:
   "debounceMs": 800,
   "cooldownMs": 1500,
   "ignoreInputMs": 300,
+  "displayOffMode": "Blackout",
   "restoreMode": "LastUsableWithMinimum",
   "minimumRestoreBrightness": 30,
   "defaultRestoreBrightness": 50

@@ -13,7 +13,7 @@ internal sealed class DisplayPowerService
 
     public void TurnOffDisplay()
     {
-        PreventSystemSleepWhileDisplayIsOff();
+        PreventSystemSleepWhileDisplayIsBlanked();
         log.Info("Turning display off");
         User32.SendMessage(
             User32.HwndBroadcast,
@@ -32,17 +32,17 @@ internal sealed class DisplayPowerService
             new nint(-1));
     }
 
-    public void AllowNormalSleepPolicy()
-    {
-        Kernel32.SetThreadExecutionState(Kernel32.ExecutionState.Continuous);
-        log.Info("Normal system sleep policy restored");
-    }
-
-    private void PreventSystemSleepWhileDisplayIsOff()
+    public void PreventSystemSleepWhileDisplayIsBlanked()
     {
         Kernel32.SetThreadExecutionState(
             Kernel32.ExecutionState.Continuous |
             Kernel32.ExecutionState.SystemRequired);
-        log.Info("System sleep prevention requested while display is off");
+        log.Info("System sleep prevention requested while display is blanked");
+    }
+
+    public void AllowNormalSleepPolicy()
+    {
+        Kernel32.SetThreadExecutionState(Kernel32.ExecutionState.Continuous);
+        log.Info("Normal system sleep policy restored");
     }
 }

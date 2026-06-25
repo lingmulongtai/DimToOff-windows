@@ -14,6 +14,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
     private readonly BrightnessService brightnessService;
     private readonly DisplayPowerService displayPowerService;
     private readonly InputHookService inputHookService;
+    private readonly BlackoutService blackoutService;
     private readonly TrayIconManager trayIconManager;
     private readonly Form messageWindow;
     private readonly object stateLock = new();
@@ -21,7 +22,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
     private AppState state = AppState.Idle;
     private int lastUsableBrightness;
     private DateTimeOffset lastOffTime;
-    private bool autoOffRearmRequired;
+    private DateTimeOffset suppressAutoOffUntil = DateTimeOffset.MinValue;
     private bool disposed;
 
     public DimToOffApplicationContext()
@@ -34,12 +35,14 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         brightnessService = new BrightnessService(log);
         displayPowerService = new DisplayPowerService(log);
         inputHookService = new InputHookService(log);
+        blackoutService = new BlackoutService(log);
         trayIconManager = new TrayIconManager(settings, settingsService);
         messageWindow = new HiddenMessageWindow();
         messageWindow.CreateControl();
 
         brightnessService.BrightnessChanged += OnBrightnessChanged;
         inputHookService.UserInputDetected += OnUserInputDetected;
+        blackoutService.UserInputDetected += OnUserInputDetected;
         trayIconManager.TurnOffDisplayRequested += (_, _) => TurnDisplayOffByApp();
         trayIconManager.RestoreBrightnessRequested += async (_, _) => await RestoreBrightnessAfterWakeAsync();
         trayIconManager.ExitRequested += (_, _) => ExitThread();
@@ -82,7 +85,6 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
                 if (IsComfortableBrightness(brightness))
                 {
                     lastUsableBrightness = brightness;
-                    autoOffRearmRequired = false;
                 }
 
                 CancelPendingDisplayOff();
@@ -92,9 +94,9 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
 
             if (brightness <= settings.OffThreshold && state == AppState.Idle)
             {
-                if (autoOffRearmRequired)
+                if (DateTimeOffset.Now < suppressAutoOffUntil)
                 {
-                    log.Info("Auto-off ignored until brightness is raised back to a usable level");
+                    log.Info("Auto-off ignored during restore safety window");
                     return;
                 }
 
@@ -161,20 +163,22 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
                 return;
             }
 
-            if (!force && autoOffRearmRequired)
-            {
-                state = AppState.Idle;
-                log.Info("Automatic display off skipped because auto-off is waiting for rearm");
-                return;
-            }
-
             state = AppState.DisplayOffByApp;
             lastOffTime = DateTimeOffset.Now;
         }
 
         CancelPendingDisplayOff();
+        displayPowerService.PreventSystemSleepWhileDisplayIsBlanked();
         inputHookService.Start();
-        displayPowerService.TurnOffDisplay();
+
+        if (UseBlackoutMode())
+        {
+            blackoutService.Show();
+        }
+        else
+        {
+            displayPowerService.TurnOffDisplay();
+        }
     }
 
     private void OnUserInputDetected(object? sender, EventArgs e)
@@ -210,8 +214,16 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         try
         {
             inputHookService.Stop();
-            displayPowerService.TurnOnDisplay();
-            await Task.Delay(700);
+            if (UseBlackoutMode())
+            {
+                blackoutService.Hide();
+                await Task.Delay(100);
+            }
+            else
+            {
+                displayPowerService.TurnOnDisplay();
+                await Task.Delay(700);
+            }
 
             int target = CalculateRestoreBrightness();
             brightnessService.SetBrightness(target);
@@ -220,27 +232,26 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             lock (stateLock)
             {
                 state = AppState.Cooldown;
-                autoOffRearmRequired = true;
+                suppressAutoOffUntil = DateTimeOffset.Now.AddSeconds(5);
             }
 
             await Task.Delay(settings.CooldownMs);
-            int? current = brightnessService.GetCurrentBrightness();
 
             lock (stateLock)
             {
-                autoOffRearmRequired = !current.HasValue || !IsComfortableBrightness(current.Value);
                 state = AppState.Idle;
             }
         }
         catch (Exception ex)
         {
             log.Error("Failed to restore brightness", ex);
+            blackoutService.Hide();
             displayPowerService.AllowNormalSleepPolicy();
             trayIconManager.ShowError("DimToOff", "Failed to restore brightness. See the log for details.");
 
             lock (stateLock)
             {
-                autoOffRearmRequired = true;
+                suppressAutoOffUntil = DateTimeOffset.Now.AddSeconds(10);
                 state = AppState.Idle;
             }
         }
@@ -265,6 +276,9 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
 
     private bool IsComfortableBrightness(int brightness) =>
         brightness >= Math.Max(settings.OffThreshold + 1, settings.MinimumRestoreBrightness);
+
+    private bool UseBlackoutMode() =>
+        string.Equals(settings.DisplayOffMode, "Blackout", StringComparison.OrdinalIgnoreCase);
 
     private void CancelPendingDisplayOff()
     {
@@ -305,6 +319,8 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             CancelPendingDisplayOff();
             brightnessService.BrightnessChanged -= OnBrightnessChanged;
             inputHookService.UserInputDetected -= OnUserInputDetected;
+            blackoutService.UserInputDetected -= OnUserInputDetected;
+            blackoutService.Dispose();
             displayPowerService.AllowNormalSleepPolicy();
             brightnessService.Dispose();
             inputHookService.Dispose();

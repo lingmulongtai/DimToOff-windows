@@ -69,6 +69,11 @@ internal sealed class SettingsService
         settings.DebounceMs = Math.Clamp(settings.DebounceMs, 300, 2000);
         settings.CooldownMs = Math.Clamp(settings.CooldownMs, 1500, 5000);
         settings.IgnoreInputMs = Math.Clamp(settings.IgnoreInputMs, 300, 2000);
+        if (!string.Equals(settings.DisplayOffMode, "Blackout", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(settings.DisplayOffMode, "MonitorPower", StringComparison.OrdinalIgnoreCase))
+        {
+            settings.DisplayOffMode = "Blackout";
+        }
 
         settings.MinimumRestoreBrightness = Math.Clamp(settings.MinimumRestoreBrightness, 30, 100);
         settings.DefaultRestoreBrightness = Math.Clamp(
