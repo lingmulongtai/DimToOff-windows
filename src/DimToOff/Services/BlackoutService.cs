@@ -19,7 +19,7 @@ internal sealed class BlackoutService : IDisposable
         this.log = log;
     }
 
-    public void Show()
+    public void Show(int fadeMs)
     {
         if (form is not null)
         {
@@ -27,10 +27,11 @@ internal sealed class BlackoutService : IDisposable
         }
 
         shownAt = DateTimeOffset.Now;
-        form = new BlackoutForm(SystemInformation.VirtualScreen);
+        form = new BlackoutForm(SystemInformation.VirtualScreen, fadeMs);
         form.UserInputDetected += OnFormUserInputDetected;
         form.Show();
         form.ForceTopMost();
+        form.BeginFadeIn();
 
         Cursor.Hide();
         cursorHidden = true;
@@ -80,10 +81,15 @@ internal sealed class BlackoutService : IDisposable
 
     private sealed class BlackoutForm : Form
     {
+        private readonly int fadeMs;
+        private System.Windows.Forms.Timer? fadeTimer;
+        private DateTime fadeStartedAt;
+
         public event EventHandler? UserInputDetected;
 
-        public BlackoutForm(Rectangle bounds)
+        public BlackoutForm(Rectangle bounds, int fadeMs)
         {
+            this.fadeMs = fadeMs;
             BackColor = Color.Black;
             Bounds = bounds;
             FormBorderStyle = FormBorderStyle.None;
@@ -92,6 +98,7 @@ internal sealed class BlackoutService : IDisposable
             StartPosition = FormStartPosition.Manual;
             TopMost = true;
             WindowState = FormWindowState.Normal;
+            Opacity = fadeMs <= 0 ? 1 : 0;
         }
 
         protected override CreateParams CreateParams
@@ -127,6 +134,47 @@ internal sealed class BlackoutService : IDisposable
             BringToFront();
             Activate();
             Focus();
+        }
+
+        public void BeginFadeIn()
+        {
+            if (fadeMs <= 0)
+            {
+                Opacity = 1;
+                return;
+            }
+
+            fadeStartedAt = DateTime.Now;
+            fadeTimer = new System.Windows.Forms.Timer
+            {
+                Interval = 16
+            };
+            fadeTimer.Tick += (_, _) =>
+            {
+                double elapsed = (DateTime.Now - fadeStartedAt).TotalMilliseconds;
+                double progress = Math.Clamp(elapsed / fadeMs, 0, 1);
+                Opacity = progress;
+
+                if (progress >= 1)
+                {
+                    fadeTimer?.Stop();
+                    fadeTimer?.Dispose();
+                    fadeTimer = null;
+                }
+            };
+            fadeTimer.Start();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                fadeTimer?.Stop();
+                fadeTimer?.Dispose();
+                fadeTimer = null;
+            }
+
+            base.Dispose(disposing);
         }
 
         protected override void OnKeyDown(KeyEventArgs e)

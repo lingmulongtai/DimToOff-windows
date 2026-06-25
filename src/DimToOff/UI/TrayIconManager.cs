@@ -12,11 +12,15 @@ internal sealed class TrayIconManager : IDisposable
     private readonly SettingsService settingsService;
     private readonly NotifyIcon notifyIcon;
     private readonly ToolStripMenuItem enabledItem;
+    private readonly ToolStripMenuItem startWithWindowsItem;
     private readonly Icon trayIcon;
     private bool disposed;
 
     public event EventHandler? TurnOffDisplayRequested;
     public event EventHandler? RestoreBrightnessRequested;
+    public event EventHandler? SettingsRequested;
+    public event EventHandler<bool>? EnabledChanged;
+    public event EventHandler<bool>? StartWithWindowsChanged;
     public event EventHandler? ExitRequested;
 
     public TrayIconManager(AppSettings settings, SettingsService settingsService)
@@ -35,6 +39,19 @@ internal sealed class TrayIconManager : IDisposable
         {
             settings.Enabled = enabledItem.Checked;
             settingsService.Save(settings);
+            EnabledChanged?.Invoke(this, settings.Enabled);
+        };
+
+        startWithWindowsItem = new ToolStripMenuItem("Start with Windows")
+        {
+            CheckOnClick = true,
+            Checked = settings.StartWithWindows
+        };
+        startWithWindowsItem.CheckedChanged += (_, _) =>
+        {
+            settings.StartWithWindows = startWithWindowsItem.Checked;
+            settingsService.Save(settings);
+            StartWithWindowsChanged?.Invoke(this, settings.StartWithWindows);
         };
 
         var menu = new ContextMenuStrip();
@@ -54,12 +71,8 @@ internal sealed class TrayIconManager : IDisposable
         menu.Items.Add(enabledItem);
         menu.Items.Add(new ToolStripMenuItem("Blank Screen Now", null, (_, _) => TurnOffDisplayRequested?.Invoke(this, EventArgs.Empty)));
         menu.Items.Add(new ToolStripMenuItem("Restore Brightness", null, (_, _) => RestoreBrightnessRequested?.Invoke(this, EventArgs.Empty)));
-        menu.Items.Add(new ToolStripMenuItem("Settings", null, (_, _) => ShowSettingsPlaceholder()));
-        menu.Items.Add(new ToolStripMenuItem("Start with Windows")
-        {
-            Enabled = false,
-            Checked = settings.StartWithWindows
-        });
+        menu.Items.Add(new ToolStripMenuItem("Settings", null, (_, _) => SettingsRequested?.Invoke(this, EventArgs.Empty)));
+        menu.Items.Add(startWithWindowsItem);
         menu.Items.Add(new ToolStripMenuItem("About", null, (_, _) => ShowAbout()));
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("Exit", null, (_, _) => ExitRequested?.Invoke(this, EventArgs.Empty)));
@@ -86,13 +99,10 @@ internal sealed class TrayIconManager : IDisposable
         notifyIcon.ShowBalloonTip(5000);
     }
 
-    private void ShowSettingsPlaceholder()
+    public void RefreshSettings()
     {
-        MessageBox.Show(
-            "Settings UI is not implemented in the MVP. Edit %APPDATA%\\DimToOff\\settings.json if needed.",
-            "DimToOff Settings",
-            MessageBoxButtons.OK,
-            MessageBoxIcon.Information);
+        enabledItem.Checked = settings.Enabled;
+        startWithWindowsItem.Checked = settings.StartWithWindows;
     }
 
     private static void ShowAbout()

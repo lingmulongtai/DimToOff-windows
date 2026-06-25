@@ -10,6 +10,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
 {
     private readonly LogService log;
     private readonly SettingsService settingsService;
+    private readonly StartupService startupService;
     private readonly AppSettings settings;
     private readonly BrightnessService brightnessService;
     private readonly DisplayPowerService displayPowerService;
@@ -20,6 +21,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
     private readonly int uiThreadId;
     private readonly object stateLock = new();
     private CancellationTokenSource? debounceCts;
+    private CancellationTokenSource? brightnessSaveCts;
     private AppState state = AppState.Idle;
     private int lastUsableBrightness;
     private DateTimeOffset lastOffTime;
@@ -31,7 +33,10 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         uiThreadId = Environment.CurrentManagedThreadId;
         log = new LogService();
         settingsService = new SettingsService(log);
+        startupService = new StartupService(log);
         settings = settingsService.Load();
+        settings.StartWithWindows = startupService.IsEnabled();
+        settingsService.Save(settings);
         lastUsableBrightness = settings.DefaultRestoreBrightness;
 
         brightnessService = new BrightnessService(log);
@@ -47,6 +52,14 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         blackoutService.UserInputDetected += OnUserInputDetected;
         trayIconManager.TurnOffDisplayRequested += (_, _) => TurnDisplayOffByApp();
         trayIconManager.RestoreBrightnessRequested += async (_, _) => await RestoreBrightnessAfterWakeAsync();
+        trayIconManager.SettingsRequested += (_, _) => ShowSettings();
+        trayIconManager.StartWithWindowsChanged += (_, enabled) =>
+        {
+            startupService.SetEnabled(enabled);
+            settings.StartWithWindows = startupService.IsEnabled();
+            settingsService.Save(settings);
+            trayIconManager.RefreshSettings();
+        };
         trayIconManager.ExitRequested += (_, _) => ExitThread();
 
         log.Info("DimToOff started");
@@ -81,11 +94,6 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
 
             if (state == AppState.DisplayOffByApp && brightness > settings.OffThreshold)
             {
-                if (IsComfortableBrightness(brightness))
-                {
-                    lastUsableBrightness = brightness;
-                }
-
                 state = AppState.RestoringBrightness;
                 restoreBecauseBrightnessReturned = true;
             }
@@ -97,7 +105,11 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             {
                 if (IsComfortableBrightness(brightness))
                 {
-                    lastUsableBrightness = brightness;
+                    ScheduleLastUsableBrightnessCommit(brightness);
+                }
+                else
+                {
+                    CancelPendingBrightnessSave();
                 }
 
                 CancelPendingDisplayOff();
@@ -106,6 +118,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             }
             else if (brightness <= settings.OffThreshold && state == AppState.Idle)
             {
+                CancelPendingBrightnessSave();
                 if (DateTimeOffset.Now < suppressAutoOffUntil)
                 {
                     log.Info("Auto-off ignored during restore safety window");
@@ -122,6 +135,18 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             log.Info($"Brightness returned to {brightness}%, hiding blackout");
             QueueToUiThread(async () => await RestoreFromBrightnessChangeAsync());
         }
+    }
+
+    private void ShowSettings()
+    {
+        using var form = new SettingsForm(settings, settingsService, startupService);
+        form.SettingsSaved += (_, _) =>
+        {
+            settings.StartWithWindows = startupService.IsEnabled();
+            settingsService.Save(settings);
+            trayIconManager.RefreshSettings();
+        };
+        form.ShowDialog();
     }
 
     private void StartDebounceTimer()
@@ -186,11 +211,12 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         }
 
         CancelPendingDisplayOff();
+        CancelPendingBrightnessSave();
         displayPowerService.PreventSystemSleepWhileDisplayIsBlanked();
 
         if (UseBlackoutMode())
         {
-            blackoutService.Show();
+            blackoutService.Show(settings.FadeToBlackMs);
         }
         else
         {
@@ -344,6 +370,54 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         debounceCts = null;
     }
 
+    private void ScheduleLastUsableBrightnessCommit(int brightness)
+    {
+        CancelPendingBrightnessSave();
+        brightnessSaveCts = new CancellationTokenSource();
+        CancellationToken token = brightnessSaveCts.Token;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(settings.BrightnessSaveStableMs, token);
+                if (token.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                int? current = brightnessService.GetCurrentBrightness();
+                if (!current.HasValue || current.Value != brightness || !IsComfortableBrightness(current.Value))
+                {
+                    return;
+                }
+
+                lock (stateLock)
+                {
+                    if (state == AppState.Idle)
+                    {
+                        lastUsableBrightness = brightness;
+                        log.Info($"Last usable brightness committed after stable delay: {lastUsableBrightness}%");
+                    }
+                }
+            }
+            catch (TaskCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                log.Error("Failed to commit stable brightness", ex);
+            }
+        });
+    }
+
+    private void CancelPendingBrightnessSave()
+    {
+        brightnessSaveCts?.Cancel();
+        brightnessSaveCts?.Dispose();
+        brightnessSaveCts = null;
+    }
+
     private void PostToUiThread(Action action)
     {
         if (Environment.CurrentManagedThreadId == uiThreadId)
@@ -405,6 +479,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         {
             log.Info("DimToOff stopping");
             CancelPendingDisplayOff();
+            CancelPendingBrightnessSave();
             brightnessService.BrightnessChanged -= OnBrightnessChanged;
             inputHookService.UserInputDetected -= OnUserInputDetected;
             blackoutService.UserInputDetected -= OnUserInputDetected;

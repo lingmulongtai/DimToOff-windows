@@ -21,6 +21,8 @@ DimToOff is a Windows tray utility for laptops. When the built-in display bright
 - Uses a cooldown after restore to prevent immediate re-off loops.
 - Requires brightness to return to a usable level before automatic display-off can arm again after a failed or partial restore.
 - Keeps the system awake while the display is off by requesting `ES_SYSTEM_REQUIRED`; the app turns off the display only, not the PC.
+- Saves restore brightness only after the brightness has stayed stable for a short period, so holding the brightness-down key does not accidentally store a too-dark value.
+- Fades the blackout overlay in instead of showing it abruptly.
 - Does not store key contents, mouse coordinates, input history, telemetry, or network data.
 
 ## Build
@@ -61,6 +63,8 @@ Right-click the tray icon for:
 - Enable/disable DimToOff
 - Turn Off Display Now
 - Restore Brightness Now
+- Settings
+- Start with Windows
 - About
 - Exit
 
@@ -85,6 +89,8 @@ Default values:
   "debounceMs": 800,
   "cooldownMs": 1500,
   "ignoreInputMs": 300,
+  "brightnessSaveStableMs": 2500,
+  "fadeToBlackMs": 280,
   "displayOffMode": "Blackout",
   "restoreMode": "LastUsableWithMinimum",
   "minimumRestoreBrightness": 30,
@@ -92,7 +98,7 @@ Default values:
 }
 ```
 
-The graphical settings screen and start-with-Windows registration are intentionally deferred in this MVP.
+The settings screen can edit these values. `Start with Windows` uses the current user's Run key and does not require administrator privileges.
 
 ## Logs
 

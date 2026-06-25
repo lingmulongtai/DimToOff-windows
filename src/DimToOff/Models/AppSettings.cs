@@ -7,6 +7,8 @@ internal sealed class AppSettings
     public int DebounceMs { get; set; } = 800;
     public int CooldownMs { get; set; } = 1500;
     public int IgnoreInputMs { get; set; } = 300;
+    public int BrightnessSaveStableMs { get; set; } = 2500;
+    public int FadeToBlackMs { get; set; } = 280;
     public string DisplayOffMode { get; set; } = "Blackout";
     public string RestoreMode { get; set; } = "LastUsableWithMinimum";
     public int MinimumRestoreBrightness { get; set; } = 30;
