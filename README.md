@@ -16,7 +16,10 @@ DimToOff is a Windows tray utility for laptops. When the built-in display bright
 - Debounces the trigger for 800 ms, then sends `WM_SYSCOMMAND / SC_MONITORPOWER` to turn the display off.
 - Installs low-level keyboard and mouse hooks only while the display is off by the app.
 - Restores `lastUsableBrightness`, never the minimum brightness value itself.
+- Remembers only a usable brightness level at or above `minimumRestoreBrightness`, so the last tiny step before display-off is not used as the restore target.
 - Uses a cooldown after restore to prevent immediate re-off loops.
+- Requires brightness to return to a usable level before automatic display-off can arm again after a failed or partial restore.
+- Keeps the system awake while the display is off by requesting `ES_SYSTEM_REQUIRED`; the app turns off the display only, not the PC.
 - Does not store key contents, mouse coordinates, input history, telemetry, or network data.
 
 ## Build
@@ -82,8 +85,8 @@ Default values:
   "cooldownMs": 1500,
   "ignoreInputMs": 300,
   "restoreMode": "LastUsableWithMinimum",
-  "minimumRestoreBrightness": 20,
-  "defaultRestoreBrightness": 40
+  "minimumRestoreBrightness": 30,
+  "defaultRestoreBrightness": 50
 }
 ```
 

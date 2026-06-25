@@ -21,6 +21,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
     private AppState state = AppState.Idle;
     private int lastUsableBrightness;
     private DateTimeOffset lastOffTime;
+    private bool autoOffRearmRequired;
     private bool disposed;
 
     public DimToOffApplicationContext()
@@ -51,7 +52,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
     private void InitializeBrightness()
     {
         int? current = brightnessService.GetCurrentBrightness();
-        if (current.HasValue && current.Value > settings.OffThreshold)
+        if (current.HasValue && IsComfortableBrightness(current.Value))
         {
             lastUsableBrightness = current.Value;
             log.Info($"Initial last usable brightness: {lastUsableBrightness}%");
@@ -78,7 +79,12 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
 
             if (brightness > settings.OffThreshold)
             {
-                lastUsableBrightness = brightness;
+                if (IsComfortableBrightness(brightness))
+                {
+                    lastUsableBrightness = brightness;
+                    autoOffRearmRequired = false;
+                }
+
                 CancelPendingDisplayOff();
                 state = AppState.Idle;
                 return;
@@ -86,6 +92,12 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
 
             if (brightness <= settings.OffThreshold && state == AppState.Idle)
             {
+                if (autoOffRearmRequired)
+                {
+                    log.Info("Auto-off ignored until brightness is raised back to a usable level");
+                    return;
+                }
+
                 state = AppState.PendingDisplayOff;
                 StartDebounceTimer();
             }
@@ -111,7 +123,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
                 int? current = brightnessService.GetCurrentBrightness();
                 if (current.HasValue && current.Value <= settings.OffThreshold)
                 {
-                    PostToUiThread(TurnDisplayOffByApp);
+                    PostToUiThread(() => TurnDisplayOffByApp(force: false));
                     return;
                 }
 
@@ -134,7 +146,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         });
     }
 
-    private void TurnDisplayOffByApp()
+    private void TurnDisplayOffByApp(bool force = true)
     {
         lock (stateLock)
         {
@@ -146,6 +158,13 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
 
             if (state is AppState.DisplayOffByApp or AppState.RestoringBrightness or AppState.Cooldown)
             {
+                return;
+            }
+
+            if (!force && autoOffRearmRequired)
+            {
+                state = AppState.Idle;
+                log.Info("Automatic display off skipped because auto-off is waiting for rearm");
                 return;
             }
 
@@ -190,30 +209,38 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
 
         try
         {
-            await Task.Delay(200);
+            inputHookService.Stop();
+            displayPowerService.TurnOnDisplay();
+            await Task.Delay(700);
+
             int target = CalculateRestoreBrightness();
             brightnessService.SetBrightness(target);
-            inputHookService.Stop();
+            displayPowerService.AllowNormalSleepPolicy();
 
             lock (stateLock)
             {
                 state = AppState.Cooldown;
+                autoOffRearmRequired = true;
             }
 
             await Task.Delay(settings.CooldownMs);
+            int? current = brightnessService.GetCurrentBrightness();
 
             lock (stateLock)
             {
+                autoOffRearmRequired = !current.HasValue || !IsComfortableBrightness(current.Value);
                 state = AppState.Idle;
             }
         }
         catch (Exception ex)
         {
             log.Error("Failed to restore brightness", ex);
+            displayPowerService.AllowNormalSleepPolicy();
             trayIconManager.ShowError("DimToOff", "Failed to restore brightness. See the log for details.");
 
             lock (stateLock)
             {
+                autoOffRearmRequired = true;
                 state = AppState.Idle;
             }
         }
@@ -235,6 +262,9 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
 
         return Math.Clamp(target, 0, 100);
     }
+
+    private bool IsComfortableBrightness(int brightness) =>
+        brightness >= Math.Max(settings.OffThreshold + 1, settings.MinimumRestoreBrightness);
 
     private void CancelPendingDisplayOff()
     {
@@ -275,6 +305,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             CancelPendingDisplayOff();
             brightnessService.BrightnessChanged -= OnBrightnessChanged;
             inputHookService.UserInputDetected -= OnUserInputDetected;
+            displayPowerService.AllowNormalSleepPolicy();
             brightnessService.Dispose();
             inputHookService.Dispose();
             trayIconManager.Dispose();

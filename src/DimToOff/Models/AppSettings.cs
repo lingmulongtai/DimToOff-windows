@@ -8,8 +8,8 @@ internal sealed class AppSettings
     public int CooldownMs { get; set; } = 1500;
     public int IgnoreInputMs { get; set; } = 300;
     public string RestoreMode { get; set; } = "LastUsableWithMinimum";
-    public int MinimumRestoreBrightness { get; set; } = 20;
-    public int DefaultRestoreBrightness { get; set; } = 40;
+    public int MinimumRestoreBrightness { get; set; } = 30;
+    public int DefaultRestoreBrightness { get; set; } = 50;
     public bool StartWithWindows { get; set; }
     public bool ShowErrorNotifications { get; set; } = true;
     public bool DisableWhileFullscreen { get; set; }

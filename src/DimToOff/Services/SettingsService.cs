@@ -35,12 +35,17 @@ internal sealed class SettingsService
             }
 
             string json = File.ReadAllText(settingsFilePath);
-            return JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new AppSettings();
+            var settings = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new AppSettings();
+            Normalize(settings);
+            Save(settings);
+            return settings;
         }
         catch (Exception ex)
         {
             log.Error("Failed to load settings. Defaults will be used", ex);
-            return new AppSettings();
+            var settings = new AppSettings();
+            Normalize(settings);
+            return settings;
         }
     }
 
@@ -48,6 +53,7 @@ internal sealed class SettingsService
     {
         try
         {
+            Normalize(settings);
             string json = JsonSerializer.Serialize(settings, JsonOptions);
             File.WriteAllText(settingsFilePath, json);
         }
@@ -55,5 +61,19 @@ internal sealed class SettingsService
         {
             log.Error("Failed to save settings", ex);
         }
+    }
+
+    private static void Normalize(AppSettings settings)
+    {
+        settings.OffThreshold = Math.Clamp(settings.OffThreshold, 0, 10);
+        settings.DebounceMs = Math.Clamp(settings.DebounceMs, 300, 2000);
+        settings.CooldownMs = Math.Clamp(settings.CooldownMs, 1500, 5000);
+        settings.IgnoreInputMs = Math.Clamp(settings.IgnoreInputMs, 300, 2000);
+
+        settings.MinimumRestoreBrightness = Math.Clamp(settings.MinimumRestoreBrightness, 30, 100);
+        settings.DefaultRestoreBrightness = Math.Clamp(
+            Math.Max(settings.DefaultRestoreBrightness, settings.MinimumRestoreBrightness),
+            30,
+            100);
     }
 }
