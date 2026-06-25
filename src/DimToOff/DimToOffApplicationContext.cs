@@ -17,6 +17,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
     private readonly BlackoutService blackoutService;
     private readonly TrayIconManager trayIconManager;
     private readonly Form messageWindow;
+    private readonly int uiThreadId;
     private readonly object stateLock = new();
     private CancellationTokenSource? debounceCts;
     private AppState state = AppState.Idle;
@@ -27,6 +28,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
 
     public DimToOffApplicationContext()
     {
+        uiThreadId = Environment.CurrentManagedThreadId;
         log = new LogService();
         settingsService = new SettingsService(log);
         settings = settingsService.Load();
@@ -38,7 +40,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         blackoutService = new BlackoutService(log);
         trayIconManager = new TrayIconManager(settings, settingsService);
         messageWindow = new HiddenMessageWindow();
-        messageWindow.CreateControl();
+        _ = messageWindow.Handle;
 
         brightnessService.BrightnessChanged += OnBrightnessChanged;
         inputHookService.UserInputDetected += OnUserInputDetected;
@@ -118,7 +120,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         if (restoreBecauseBrightnessReturned)
         {
             log.Info($"Brightness returned to {brightness}%, hiding blackout");
-            PostToUiThread(async () => await RestoreFromBrightnessChangeAsync());
+            QueueToUiThread(async () => await RestoreFromBrightnessChangeAsync());
         }
     }
 
@@ -185,7 +187,6 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
 
         CancelPendingDisplayOff();
         displayPowerService.PreventSystemSleepWhileDisplayIsBlanked();
-        inputHookService.Start();
 
         if (UseBlackoutMode())
         {
@@ -193,6 +194,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         }
         else
         {
+            inputHookService.Start();
             displayPowerService.TurnOffDisplay();
         }
     }
@@ -214,7 +216,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             state = AppState.RestoringBrightness;
         }
 
-        PostToUiThread(async () => await RestoreBrightnessAfterWakeAsync());
+        QueueToUiThread(async () => await RestoreBrightnessAfterWakeAsync());
     }
 
     private async Task RestoreBrightnessAfterWakeAsync()
@@ -229,7 +231,6 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
 
         try
         {
-            inputHookService.Stop();
             if (UseBlackoutMode())
             {
                 blackoutService.Hide();
@@ -237,12 +238,13 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             }
             else
             {
+                inputHookService.Stop();
                 displayPowerService.TurnOnDisplay();
                 await Task.Delay(700);
             }
 
             int target = CalculateRestoreBrightness();
-            brightnessService.SetBrightness(target);
+            await Task.Run(() => brightnessService.SetBrightness(target));
             displayPowerService.AllowNormalSleepPolicy();
 
             lock (stateLock)
@@ -277,7 +279,11 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
     {
         try
         {
-            inputHookService.Stop();
+            if (!UseBlackoutMode())
+            {
+                inputHookService.Stop();
+            }
+
             blackoutService.Hide();
             displayPowerService.AllowNormalSleepPolicy();
 
@@ -340,13 +346,44 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
 
     private void PostToUiThread(Action action)
     {
-        if (messageWindow.IsHandleCreated && messageWindow.InvokeRequired)
+        if (Environment.CurrentManagedThreadId == uiThreadId)
         {
-            messageWindow.BeginInvoke(action);
+            action();
             return;
         }
 
-        action();
+        if (!messageWindow.IsHandleCreated)
+        {
+            log.Error("UI invoker handle is not available; action was not posted");
+            return;
+        }
+
+        try
+        {
+            messageWindow.BeginInvoke(action);
+        }
+        catch (InvalidOperationException ex)
+        {
+            log.Error("Failed to post action to UI thread", ex);
+        }
+    }
+
+    private void QueueToUiThread(Action action)
+    {
+        if (!messageWindow.IsHandleCreated)
+        {
+            log.Error("UI invoker handle is not available; action was not queued");
+            return;
+        }
+
+        try
+        {
+            messageWindow.BeginInvoke(action);
+        }
+        catch (InvalidOperationException ex)
+        {
+            log.Error("Failed to queue action to UI thread", ex);
+        }
     }
 
     protected override void ExitThreadCore()
