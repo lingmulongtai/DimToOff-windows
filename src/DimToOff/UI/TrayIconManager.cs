@@ -54,28 +54,29 @@ internal sealed class TrayIconManager : IDisposable
             StartWithWindowsChanged?.Invoke(this, settings.StartWithWindows);
         };
 
-        var menu = new ContextMenuStrip();
+        var menu = new RoundedContextMenuStrip();
         menu.Renderer = new DarkToolStripRenderer();
-        menu.BackColor = Color.FromArgb(24, 24, 27);
+        menu.BackColor = Color.FromArgb(32, 32, 36);
         menu.ForeColor = Color.FromArgb(244, 244, 245);
         menu.ShowImageMargin = true;
-        menu.Padding = new Padding(8);
+        menu.Padding = new Padding(8, 10, 8, 10);
 
         menu.Items.Add(new ToolStripLabel("DimToOff")
         {
             Font = new Font(SystemFonts.MessageBoxFont ?? Control.DefaultFont, FontStyle.Bold),
             ForeColor = Color.White,
-            Image = trayIcon.ToBitmap()
+            Image = trayIcon.ToBitmap(),
+            Padding = new Padding(4, 6, 4, 6)
         });
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(enabledItem);
-        menu.Items.Add(new ToolStripMenuItem("Blank Screen Now", null, (_, _) => TurnOffDisplayRequested?.Invoke(this, EventArgs.Empty)));
-        menu.Items.Add(new ToolStripMenuItem("Restore Brightness", null, (_, _) => RestoreBrightnessRequested?.Invoke(this, EventArgs.Empty)));
-        menu.Items.Add(new ToolStripMenuItem("Settings", null, (_, _) => SettingsRequested?.Invoke(this, EventArgs.Empty)));
-        menu.Items.Add(startWithWindowsItem);
-        menu.Items.Add(new ToolStripMenuItem("About", null, (_, _) => ShowAbout()));
+        menu.Items.Add(StyleItem(enabledItem));
+        menu.Items.Add(CreateItem("Blank screen now", () => TurnOffDisplayRequested?.Invoke(this, EventArgs.Empty)));
+        menu.Items.Add(CreateItem("Restore brightness", () => RestoreBrightnessRequested?.Invoke(this, EventArgs.Empty)));
+        menu.Items.Add(CreateItem("Settings", () => SettingsRequested?.Invoke(this, EventArgs.Empty)));
+        menu.Items.Add(StyleItem(startWithWindowsItem));
+        menu.Items.Add(CreateItem("About", ShowAbout));
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(new ToolStripMenuItem("Exit", null, (_, _) => ExitRequested?.Invoke(this, EventArgs.Empty)));
+        menu.Items.Add(CreateItem("Exit", () => ExitRequested?.Invoke(this, EventArgs.Empty)));
 
         notifyIcon = new NotifyIcon
         {
@@ -114,6 +115,21 @@ internal sealed class TrayIconManager : IDisposable
             MessageBoxIcon.Information);
     }
 
+    private static ToolStripMenuItem CreateItem(string text, Action action)
+    {
+        var item = new ToolStripMenuItem(text, null, (_, _) => action());
+        return StyleItem(item);
+    }
+
+    private static ToolStripMenuItem StyleItem(ToolStripMenuItem item)
+    {
+        item.ForeColor = Color.FromArgb(244, 244, 245);
+        item.BackColor = Color.FromArgb(32, 32, 36);
+        item.Padding = new Padding(8, 7, 10, 7);
+        item.Margin = new Padding(2, 1, 2, 1);
+        return item;
+    }
+
     public void Dispose()
     {
         if (disposed)
@@ -134,23 +150,54 @@ internal sealed class TrayIconManager : IDisposable
         graphics.SmoothingMode = SmoothingMode.AntiAlias;
         graphics.Clear(Color.Transparent);
 
-        using var monitorBrush = new LinearGradientBrush(
-            new Rectangle(5, 7, 22, 15),
-            Color.FromArgb(32, 34, 40),
-            Color.FromArgb(8, 9, 12),
-            LinearGradientMode.Vertical);
-        using var accentPen = new Pen(Color.FromArgb(97, 218, 251), 2);
-        using var dimBrush = new SolidBrush(Color.FromArgb(97, 218, 251));
-        using var cutBrush = new SolidBrush(Color.FromArgb(8, 9, 12));
+        using var accentBrush = new SolidBrush(Color.FromArgb(76, 194, 255));
+        using var darkBrush = new SolidBrush(Color.FromArgb(14, 14, 18));
+        using var softBrush = new SolidBrush(Color.FromArgb(180, 255, 255, 255));
 
-        graphics.FillRoundedRectangle(monitorBrush, new Rectangle(5, 7, 22, 15), 4);
-        graphics.DrawRoundedRectangle(accentPen, new Rectangle(5, 7, 22, 15), 4);
-        graphics.FillRectangle(dimBrush, 13, 22, 6, 3);
-        graphics.FillRoundedRectangle(dimBrush, new Rectangle(10, 25, 12, 2), 1);
-        graphics.FillEllipse(dimBrush, 15, 10, 8, 8);
-        graphics.FillEllipse(cutBrush, 18, 8, 8, 8);
+        using var crescentRegion = new Region(new Rectangle(7, 5, 18, 18));
+        crescentRegion.Exclude(new Rectangle(14, 2, 18, 18));
+        graphics.FillRegion(accentBrush, crescentRegion);
+        graphics.FillEllipse(darkBrush, 12, 16, 11, 11);
+        graphics.FillEllipse(softBrush, 16, 20, 3, 3);
 
         return Icon.FromHandle(bitmap.GetHicon());
+    }
+
+    private sealed class RoundedContextMenuStrip : ContextMenuStrip
+    {
+        protected override void OnVisibleChanged(EventArgs e)
+        {
+            base.OnVisibleChanged(e);
+            ApplyRoundedRegion();
+        }
+
+        protected override void OnSizeChanged(EventArgs e)
+        {
+            base.OnSizeChanged(e);
+            ApplyRoundedRegion();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                Region?.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
+
+        private void ApplyRoundedRegion()
+        {
+            if (Width <= 0 || Height <= 0)
+            {
+                return;
+            }
+
+            using GraphicsPath path = GraphicsExtensions.CreateRoundedRectanglePath(new Rectangle(0, 0, Width, Height), 12);
+            Region?.Dispose();
+            Region = new Region(path);
+        }
     }
 
     private sealed class DarkToolStripRenderer : ToolStripProfessionalRenderer
@@ -163,30 +210,56 @@ internal sealed class TrayIconManager : IDisposable
 
         protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e)
         {
-            Rectangle bounds = new(Point.Empty, e.Item.Size);
+            Rectangle bounds = new(3, 1, e.Item.Width - 6, e.Item.Height - 2);
             Color color = e.Item.Selected
-                ? Color.FromArgb(39, 39, 42)
-                : Color.FromArgb(24, 24, 27);
+                ? Color.FromArgb(54, 54, 60)
+                : Color.FromArgb(32, 32, 36);
             using var brush = new SolidBrush(color);
-            e.Graphics.FillRectangle(brush, bounds);
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            e.Graphics.FillRoundedRectangle(brush, bounds, 8);
+        }
+
+        protected override void OnRenderToolStripBackground(ToolStripRenderEventArgs e)
+        {
+            using var brush = new SolidBrush(Color.FromArgb(32, 32, 36));
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            e.Graphics.FillRoundedRectangle(brush, new Rectangle(0, 0, e.ToolStrip.Width - 1, e.ToolStrip.Height - 1), 12);
+        }
+
+        protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e)
+        {
+            using var pen = new Pen(Color.FromArgb(70, 70, 78));
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            e.Graphics.DrawRoundedRectangle(pen, new Rectangle(0, 0, e.ToolStrip.Width - 1, e.ToolStrip.Height - 1), 12);
+        }
+
+        protected override void OnRenderItemCheck(ToolStripItemImageRenderEventArgs e)
+        {
+            Rectangle box = new(e.ImageRectangle.X + 2, e.ImageRectangle.Y + 2, 14, 14);
+            using var brush = new SolidBrush(Color.FromArgb(76, 194, 255));
+            using var pen = new Pen(Color.FromArgb(12, 12, 16), 2);
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            e.Graphics.FillRoundedRectangle(brush, box, 4);
+            e.Graphics.DrawLine(pen, box.X + 4, box.Y + 7, box.X + 7, box.Y + 10);
+            e.Graphics.DrawLine(pen, box.X + 7, box.Y + 10, box.X + 11, box.Y + 4);
         }
 
         protected override void OnRenderSeparator(ToolStripSeparatorRenderEventArgs e)
         {
-            using var pen = new Pen(Color.FromArgb(63, 63, 70));
+            using var pen = new Pen(Color.FromArgb(70, 70, 78));
             int y = e.Item.Height / 2;
-            e.Graphics.DrawLine(pen, 8, y, e.Item.Width - 8, y);
+            e.Graphics.DrawLine(pen, 14, y, e.Item.Width - 14, y);
         }
     }
 
     private sealed class DarkColorTable : ProfessionalColorTable
     {
-        public override Color ToolStripDropDownBackground => Color.FromArgb(24, 24, 27);
-        public override Color ImageMarginGradientBegin => Color.FromArgb(24, 24, 27);
-        public override Color ImageMarginGradientMiddle => Color.FromArgb(24, 24, 27);
-        public override Color ImageMarginGradientEnd => Color.FromArgb(24, 24, 27);
-        public override Color MenuItemSelected => Color.FromArgb(39, 39, 42);
-        public override Color MenuBorder => Color.FromArgb(63, 63, 70);
+        public override Color ToolStripDropDownBackground => Color.FromArgb(32, 32, 36);
+        public override Color ImageMarginGradientBegin => Color.FromArgb(32, 32, 36);
+        public override Color ImageMarginGradientMiddle => Color.FromArgb(32, 32, 36);
+        public override Color ImageMarginGradientEnd => Color.FromArgb(32, 32, 36);
+        public override Color MenuItemSelected => Color.FromArgb(54, 54, 60);
+        public override Color MenuBorder => Color.FromArgb(70, 70, 78);
     }
 }
 
@@ -204,7 +277,7 @@ internal static class GraphicsExtensions
         graphics.DrawPath(pen, path);
     }
 
-    private static GraphicsPath CreateRoundedRectanglePath(Rectangle bounds, int radius)
+    public static GraphicsPath CreateRoundedRectanglePath(Rectangle bounds, int radius)
     {
         int diameter = radius * 2;
         var path = new GraphicsPath();
