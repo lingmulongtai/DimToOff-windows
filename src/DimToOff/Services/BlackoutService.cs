@@ -138,7 +138,8 @@ internal sealed class BlackoutService : IDisposable
         protected override void OnMouseMove(MouseEventArgs e)
         {
             base.OnMouseMove(e);
-            UserInputDetected?.Invoke(this, EventArgs.Empty);
+            // Showing or activating the overlay can synthesize mouse-move messages.
+            // Do not treat movement alone as an intentional wake action.
         }
 
         protected override void OnMouseDown(MouseEventArgs e)
