@@ -6,7 +6,7 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using Windows.Graphics;
+using Microsoft.UI.Xaml.Media.Animation;
 using WinRT.Interop;
 
 namespace DimToOff.Settings;
@@ -16,11 +16,14 @@ public sealed partial class MainWindow : Window
     private const int SettingsWindowHeightDips = 820;
     private const int SettingsWindowMinimumWidthDips = 744;
     private const int SettingsWindowMinimumHeightDips = 620;
-    private const int SettingsWindowOuterPaddingDips = 40;
 
     private readonly SettingsStore settingsStore = new();
     private readonly TrayCommandClient commandClient;
     private readonly string mainExecutablePath;
+    private IDisposable? minimumSizeHook;
+    private CancellationTokenSource? saveInfoDismissCts;
+    private Storyboard? saveInfoStoryboard;
+    private int saveInfoAnimationVersion;
     private AppSettings settings;
 
     public MainWindow(LaunchOptions options)
@@ -55,10 +58,7 @@ public sealed partial class MainWindow : Window
         WindowId windowId = Win32Interop.GetWindowIdFromWindow(windowHandle);
         AppWindow appWindow = AppWindow.GetFromWindowId(windowId);
         appWindow.Title = "DimToOff Settings";
-        int windowWidthDips = Math.Max(
-            SettingsWindowMinimumWidthDips,
-            (int)Math.Ceiling(ContentColumn.Width + SettingsWindowOuterPaddingDips));
-        NativeWindow.ResizeForDips(windowHandle, appWindow, windowWidthDips, SettingsWindowHeightDips);
+        NativeWindow.ResizeForDips(windowHandle, appWindow, SettingsWindowMinimumWidthDips, SettingsWindowHeightDips);
 
         if (appWindow.Presenter is OverlappedPresenter presenter)
         {
@@ -66,25 +66,24 @@ public sealed partial class MainWindow : Window
             presenter.IsMaximizable = false;
         }
 
-        int minimumWidth = NativeWindow.ToPhysicalPixels(windowHandle, SettingsWindowMinimumWidthDips);
-        int minimumHeight = NativeWindow.ToPhysicalPixels(windowHandle, SettingsWindowMinimumHeightDips);
-        appWindow.Changed += (_, args) =>
-        {
-            if (!args.DidSizeChange)
-            {
-                return;
-            }
-
-            SizeInt32 currentSize = appWindow.Size;
-            int width = Math.Max(currentSize.Width, minimumWidth);
-            int height = Math.Max(currentSize.Height, minimumHeight);
-            if (width != currentSize.Width || height != currentSize.Height)
-            {
-                appWindow.Resize(new SizeInt32(width, height));
-            }
-        };
+        minimumSizeHook = NativeWindow.EnforceMinimumSize(
+            windowHandle,
+            NativeWindow.ToPhysicalPixels(windowHandle, SettingsWindowMinimumWidthDips),
+            NativeWindow.ToPhysicalPixels(windowHandle, SettingsWindowMinimumHeightDips));
+        Closed += OnClosed;
 
         DispatcherQueue.TryEnqueue(() => NativeWindow.BringToFront(windowHandle));
+    }
+
+    private void OnClosed(object sender, WindowEventArgs args)
+    {
+        saveInfoDismissCts?.Cancel();
+        saveInfoDismissCts?.Dispose();
+        saveInfoDismissCts = null;
+        saveInfoStoryboard?.Stop();
+        saveInfoStoryboard = null;
+        minimumSizeHook?.Dispose();
+        minimumSizeHook = null;
     }
 
     private void ApplySettingsToControls()
@@ -114,18 +113,154 @@ public sealed partial class MainWindow : Window
             _ = commandClient.SendAsync("reload-settings");
             settings = updated;
 
-            SaveInfoBar.Title = "Saved";
-            SaveInfoBar.Message = "DimToOff will use these settings immediately after the tray app reloads them.";
-            SaveInfoBar.Severity = InfoBarSeverity.Success;
-            SaveInfoBar.IsOpen = true;
+            ShowSaveStatus("Saved", string.Empty, InfoBarSeverity.Success, autoDismiss: true);
         }
         catch (Exception ex)
         {
-            SaveInfoBar.Title = "Could not save settings";
-            SaveInfoBar.Message = ex.Message;
-            SaveInfoBar.Severity = InfoBarSeverity.Error;
-            SaveInfoBar.IsOpen = true;
+            ShowSaveStatus("Could not save settings", ex.Message, InfoBarSeverity.Error, autoDismiss: false);
         }
+    }
+
+    private void ShowSaveStatus(string title, string message, InfoBarSeverity severity, bool autoDismiss)
+    {
+        saveInfoDismissCts?.Cancel();
+        saveInfoDismissCts?.Dispose();
+        saveInfoDismissCts = null;
+
+        SaveInfoHost.Width = severity == InfoBarSeverity.Success ? 180 : 380;
+        SaveInfoBar.Title = title;
+        SaveInfoBar.Message = message;
+        SaveInfoBar.Severity = severity;
+        SaveInfoBar.IsOpen = true;
+        ShowSaveStatusAnimated();
+
+        if (!autoDismiss)
+        {
+            return;
+        }
+
+        var dismissCts = new CancellationTokenSource();
+        saveInfoDismissCts = dismissCts;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(2400, dismissCts.Token);
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (!dismissCts.IsCancellationRequested &&
+                        ReferenceEquals(saveInfoDismissCts, dismissCts))
+                    {
+                        saveInfoDismissCts = null;
+                        dismissCts.Dispose();
+                        HideSaveStatusAnimated();
+                    }
+                });
+            }
+            catch (TaskCanceledException)
+            {
+            }
+        });
+    }
+
+    private void ShowSaveStatusAnimated()
+    {
+        int version = ++saveInfoAnimationVersion;
+        saveInfoStoryboard?.Stop();
+
+        SaveInfoHost.Visibility = Visibility.Visible;
+        SaveInfoHost.Opacity = 0;
+        SaveInfoTransform.TranslateX = 18;
+        SaveInfoTransform.TranslateY = -6;
+
+        saveInfoStoryboard = CreateSaveInfoStoryboard(
+            opacityFrom: 0,
+            opacityTo: 1,
+            xFrom: 18,
+            xTo: 0,
+            yFrom: -6,
+            yTo: 0,
+            durationMs: 180,
+            EasingMode.EaseOut);
+        saveInfoStoryboard.Completed += (_, _) =>
+        {
+            if (version == saveInfoAnimationVersion)
+            {
+                SaveInfoHost.Opacity = 1;
+                SaveInfoTransform.TranslateX = 0;
+                SaveInfoTransform.TranslateY = 0;
+            }
+        };
+        saveInfoStoryboard.Begin();
+    }
+
+    private void HideSaveStatusAnimated()
+    {
+        int version = ++saveInfoAnimationVersion;
+        saveInfoStoryboard?.Stop();
+
+        saveInfoStoryboard = CreateSaveInfoStoryboard(
+            opacityFrom: SaveInfoHost.Opacity,
+            opacityTo: 0,
+            xFrom: SaveInfoTransform.TranslateX,
+            xTo: 18,
+            yFrom: SaveInfoTransform.TranslateY,
+            yTo: -6,
+            durationMs: 140,
+            EasingMode.EaseIn);
+        saveInfoStoryboard.Completed += (_, _) =>
+        {
+            if (version == saveInfoAnimationVersion)
+            {
+                SaveInfoBar.IsOpen = false;
+                SaveInfoHost.Visibility = Visibility.Collapsed;
+                SaveInfoHost.Opacity = 0;
+                SaveInfoTransform.TranslateX = 18;
+                SaveInfoTransform.TranslateY = -6;
+            }
+        };
+        saveInfoStoryboard.Begin();
+    }
+
+    private Storyboard CreateSaveInfoStoryboard(
+        double opacityFrom,
+        double opacityTo,
+        double xFrom,
+        double xTo,
+        double yFrom,
+        double yTo,
+        int durationMs,
+        EasingMode easingMode)
+    {
+        var storyboard = new Storyboard();
+        var easing = new CubicEase { EasingMode = easingMode };
+        AddDoubleAnimation(storyboard, SaveInfoHost, "Opacity", opacityFrom, opacityTo, durationMs, easing, dependent: false);
+        AddDoubleAnimation(storyboard, SaveInfoTransform, "TranslateX", xFrom, xTo, durationMs, easing, dependent: true);
+        AddDoubleAnimation(storyboard, SaveInfoTransform, "TranslateY", yFrom, yTo, durationMs, easing, dependent: true);
+        return storyboard;
+    }
+
+    private static void AddDoubleAnimation(
+        Storyboard storyboard,
+        DependencyObject target,
+        string property,
+        double from,
+        double to,
+        int durationMs,
+        EasingFunctionBase easing,
+        bool dependent)
+    {
+        var animation = new DoubleAnimation
+        {
+            From = from,
+            To = to,
+            Duration = new Duration(TimeSpan.FromMilliseconds(durationMs)),
+            EasingFunction = easing,
+            EnableDependentAnimation = dependent
+        };
+        Storyboard.SetTarget(animation, target);
+        Storyboard.SetTargetProperty(animation, property);
+        storyboard.Children.Add(animation);
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e)

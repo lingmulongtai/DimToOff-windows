@@ -429,6 +429,30 @@
             </StackPanel>
         </ScrollViewer>
 
+        <Grid
+            x:Name="SaveInfoHost"
+            Grid.Row="1"
+            Canvas.ZIndex="20"
+            Width="180"
+            Opacity="0"
+            Visibility="Collapsed"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Top"
+            Margin="0,16,32,0">
+            <Grid.RenderTransform>
+                <CompositeTransform
+                    x:Name="SaveInfoTransform"
+                    TranslateX="18"
+                    TranslateY="-6" />
+            </Grid.RenderTransform>
+
+            <InfoBar
+                x:Name="SaveInfoBar"
+                IsOpen="True"
+                IsClosable="True"
+                Severity="Success" />
+        </Grid>
+
         <Border
             Grid.Row="2"
             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
@@ -447,16 +471,6 @@
                     HorizontalAlignment="Left"
                     BorderBrush="#164C8F"
                     BorderThickness="1" />
-
-                <InfoBar
-                    x:Name="SaveInfoBar"
-                    Grid.Column="1"
-                    IsOpen="False"
-                    IsClosable="True"
-                    Severity="Success"
-                    VerticalAlignment="Center"
-                    HorizontalAlignment="Stretch"
-                    MaxWidth="420" />
 
                 <StackPanel
                     Grid.Column="2"

@@ -19,6 +19,7 @@ internal static class NativeWindow
     private const uint SwpNoZOrder = 0x0004;
     private const uint SwpFrameChanged = 0x0020;
     private const int SwShow = 5;
+    private const uint WmGetMinMaxInfo = 0x0024;
     private static readonly IntPtr HwndTopMost = new(-1);
     private static readonly IntPtr HwndNoTopMost = new(-2);
 
@@ -48,6 +49,9 @@ internal static class NativeWindow
         SetForegroundWindow(hwnd);
         SetWindowPos(hwnd, HwndNoTopMost, 0, 0, 0, 0, SwpNoMove | SwpNoSize);
     }
+
+    public static IDisposable EnforceMinimumSize(IntPtr hwnd, int minimumWidth, int minimumHeight) =>
+        new MinimumSizeSubclass(hwnd, minimumWidth, minimumHeight);
 
     public static void MoveNearCursorForDips(IntPtr hwnd, AppWindow appWindow, int widthDips, int heightDips)
     {
@@ -129,6 +133,28 @@ internal static class NativeWindow
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr hwnd);
 
+    [DllImport("comctl32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowSubclass(
+        IntPtr hwnd,
+        SubclassProc callback,
+        IntPtr subclassId,
+        IntPtr referenceData);
+
+    [DllImport("comctl32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool RemoveWindowSubclass(
+        IntPtr hwnd,
+        SubclassProc callback,
+        IntPtr subclassId);
+
+    [DllImport("comctl32.dll")]
+    private static extern IntPtr DefSubclassProc(
+        IntPtr hwnd,
+        uint message,
+        IntPtr wParam,
+        IntPtr lParam);
+
     [DllImport("gdi32.dll")]
     private static extern IntPtr CreateRoundRectRgn(
         int left,
@@ -150,5 +176,85 @@ internal static class NativeWindow
     {
         public int X;
         public int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MinMaxInfo
+    {
+        public Point Reserved;
+        public Point MaxSize;
+        public Point MaxPosition;
+        public Point MinTrackSize;
+        public Point MaxTrackSize;
+    }
+
+    private delegate IntPtr SubclassProc(
+        IntPtr hwnd,
+        uint message,
+        IntPtr wParam,
+        IntPtr lParam,
+        IntPtr subclassId,
+        IntPtr referenceData);
+
+    private sealed class MinimumSizeSubclass : IDisposable
+    {
+        private readonly IntPtr hwnd;
+        private readonly int minimumWidth;
+        private readonly int minimumHeight;
+        private readonly SubclassProc callback;
+        private readonly GCHandle handle;
+        private readonly IntPtr subclassId;
+        private bool installed;
+        private bool disposed;
+
+        public MinimumSizeSubclass(IntPtr hwnd, int minimumWidth, int minimumHeight)
+        {
+            this.hwnd = hwnd;
+            this.minimumWidth = minimumWidth;
+            this.minimumHeight = minimumHeight;
+            callback = OnWindowMessage;
+            handle = GCHandle.Alloc(this);
+            subclassId = GCHandle.ToIntPtr(handle);
+            installed = SetWindowSubclass(hwnd, callback, subclassId, IntPtr.Zero);
+        }
+
+        public void Dispose()
+        {
+            if (disposed)
+            {
+                return;
+            }
+
+            disposed = true;
+            if (installed)
+            {
+                RemoveWindowSubclass(hwnd, callback, subclassId);
+                installed = false;
+            }
+
+            if (handle.IsAllocated)
+            {
+                handle.Free();
+            }
+        }
+
+        private IntPtr OnWindowMessage(
+            IntPtr hwnd,
+            uint message,
+            IntPtr wParam,
+            IntPtr lParam,
+            IntPtr subclassId,
+            IntPtr referenceData)
+        {
+            if (message == WmGetMinMaxInfo)
+            {
+                MinMaxInfo info = Marshal.PtrToStructure<MinMaxInfo>(lParam);
+                info.MinTrackSize.X = Math.Max(info.MinTrackSize.X, minimumWidth);
+                info.MinTrackSize.Y = Math.Max(info.MinTrackSize.Y, minimumHeight);
+                Marshal.StructureToPtr(info, lParam, false);
+            }
+
+            return DefSubclassProc(hwnd, message, wParam, lParam);
+        }
     }
 }
