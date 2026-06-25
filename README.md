@@ -9,6 +9,14 @@ DimToOff is a Windows tray utility for laptops. When the built-in display bright
 - .NET 8 SDK for building
 - No administrator privileges required
 
+## Best-Fit Displays
+
+DimToOff is most useful on OLED and mini-LED displays.
+
+The default `Blackout` mode keeps Windows awake and unlocked by placing a fullscreen black overlay on top of the desktop. On OLED panels, black pixels emit little to no light, and on mini-LED panels, local dimming may reduce visible output. On typical LCD panels, the backlight usually remains on even when the screen is black, so the app can still hide the desktop but may not meaningfully reduce panel power use or backlight wear.
+
+`MonitorPower` mode can request a real display power-off through Windows, but some laptops route that request into lock, sleep, or Modern Standby behavior. For that reason, `Blackout` is the default.
+
 ## How It Works
 
 - Watches `WmiMonitorBrightnessEvent` in `root\wmi`.
