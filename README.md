@@ -62,6 +62,14 @@ powershell -ExecutionPolicy Bypass -File .\tools\Publish-Release.ps1 -Version v0
 
 The script creates release zips under `release\<version>`.
 
+For a Microsoft Store-oriented installer, install Inno Setup 6 and run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\Build-Installer.ps1 -Version v0.3.3
+```
+
+This creates `DimToOff-<version>-setup.exe` from the standalone publish folder. The installer is per-user by default and does not require administrator privileges.
+
 ## Release Downloads
 
 GitHub releases provide two Windows x64 downloads:
@@ -70,6 +78,13 @@ GitHub releases provide two Windows x64 downloads:
 - `DimToOff-<version>-win-x64-small.zip`: smaller framework-dependent build. Use this when the target PC already has the .NET 8 Desktop Runtime and the Windows App Runtime required by the Windows App SDK.
 
 DimToOff is not published as a lone `DimToOff.exe` download because the settings window is a second WinUI executable and needs native Windows App SDK assets beside it. Downloading only the tray executable would make Settings and the tray quick panel fail to open.
+
+For Microsoft Store preparation notes, see:
+
+- `PRIVACY.md`
+- `docs/store-listing.md`
+- `docs/store-readiness-checklist.md`
+- `installer/DimToOff.iss`
 
 ## Run
 
