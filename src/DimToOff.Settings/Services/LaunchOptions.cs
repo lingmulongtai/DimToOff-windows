@@ -5,7 +5,8 @@ namespace DimToOff.Settings.Services;
 public enum LaunchMode
 {
     Settings,
-    TrayMenu
+    TrayMenu,
+    About
 }
 
 public sealed class LaunchOptions
@@ -29,6 +30,10 @@ public sealed class LaunchOptions
             else if (string.Equals(args[index], "--settings", StringComparison.OrdinalIgnoreCase))
             {
                 mode = LaunchMode.Settings;
+            }
+            else if (string.Equals(args[index], "--about", StringComparison.OrdinalIgnoreCase))
+            {
+                mode = LaunchMode.About;
             }
             else if (string.Equals(args[index], "--pipe", StringComparison.OrdinalIgnoreCase) &&
                      index + 1 < args.Length &&

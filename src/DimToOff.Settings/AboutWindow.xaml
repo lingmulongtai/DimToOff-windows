@@ -1,0 +1,210 @@
+<Window
+    x:Class="DimToOff.Settings.AboutWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid
+        MinWidth="560"
+        MinHeight="620"
+        Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid.Resources>
+            <Style x:Key="SectionTitleStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="13" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Setter Property="Margin" Value="0,18,0,4" />
+            </Style>
+
+            <Style x:Key="BodyTextStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="13" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Setter Property="TextWrapping" Value="WrapWholeWords" />
+                <Setter Property="LineHeight" Value="20" />
+            </Style>
+
+            <Style x:Key="CardStyle" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Padding" Value="18,16" />
+            </Style>
+        </Grid.Resources>
+
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="72" />
+        </Grid.RowDefinitions>
+
+        <Grid
+            x:Name="AppTitleBar"
+            Grid.Row="0"
+            ColumnSpacing="10"
+            Padding="16,0,140,0"
+            VerticalAlignment="Stretch">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="28" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Viewbox
+                Width="24"
+                Height="24"
+                VerticalAlignment="Center">
+                <Grid Width="32" Height="32">
+                    <Path
+                        Data="M 7.5 8.5 L 24.5 8.5 Q 27 8.5 27 11 L 27 20 Q 27 22.5 24.5 22.5 L 7.5 22.5 Q 5 22.5 5 20 L 5 11 Q 5 8.5 7.5 8.5 Z"
+                        Stroke="White"
+                        StrokeThickness="2.6"
+                        StrokeLineJoin="Round"
+                        Fill="Transparent" />
+                    <Path
+                        Data="M 16 22.5 L 16 25.5 M 11.5 26 L 20.5 26"
+                        Stroke="White"
+                        StrokeThickness="2.4"
+                        StrokeStartLineCap="Round"
+                        StrokeEndLineCap="Round" />
+                </Grid>
+            </Viewbox>
+
+            <TextBlock
+                Grid.Column="1"
+                Text="DimToOff"
+                FontSize="13"
+                FontWeight="SemiBold"
+                VerticalAlignment="Center"
+                Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+        </Grid>
+
+        <ScrollViewer
+            Grid.Row="1"
+            HorizontalScrollBarVisibility="Disabled"
+            HorizontalScrollMode="Disabled"
+            VerticalScrollBarVisibility="Auto"
+            VerticalScrollMode="Auto">
+            <StackPanel
+                Width="512"
+                Padding="24,22,24,24"
+                Spacing="10"
+                HorizontalAlignment="Left">
+
+                <StackPanel Spacing="5" Margin="0,0,0,4">
+                    <TextBlock
+                        Text="About"
+                        FontSize="30"
+                        FontWeight="SemiBold"
+                        Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                    <TextBlock
+                        Text="Screen blanking for laptops that keeps Windows awake."
+                        Style="{StaticResource BodyTextStyle}" />
+                </StackPanel>
+
+                <TextBlock Text="Display note" Style="{StaticResource SectionTitleStyle}" />
+
+                <Border Style="{StaticResource CardStyle}">
+                    <StackPanel Spacing="10">
+                        <TextBlock
+                            Text="Best on OLED and mini-LED"
+                            FontSize="17"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <TextBlock
+                            Text="DimToOff is most useful on OLED displays and mini-LED displays with local dimming. On a typical LCD, the blackout overlay can hide the desktop, but the panel backlight may remain on."
+                            Style="{StaticResource BodyTextStyle}" />
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="Known limitations" Style="{StaticResource SectionTitleStyle}" />
+
+                <Border Style="{StaticResource CardStyle}">
+                    <StackPanel Spacing="10">
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="20" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Glyph="&#xE946;" FontSize="15" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock
+                                Grid.Column="1"
+                                Text="Brightness detection depends on Windows WMI support for the built-in laptop display."
+                                Style="{StaticResource BodyTextStyle}" />
+                        </Grid>
+
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="20" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Glyph="&#xE946;" FontSize="15" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock
+                                Grid.Column="1"
+                                Text="External monitors are not controlled by the MVP."
+                                Style="{StaticResource BodyTextStyle}" />
+                        </Grid>
+
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="20" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Glyph="&#xE946;" FontSize="15" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock
+                                Grid.Column="1"
+                                Text="Monitor power request mode can behave differently by device. The default Blackout mode is recommended."
+                                Style="{StaticResource BodyTextStyle}" />
+                        </Grid>
+
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="20" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Glyph="&#xE946;" FontSize="15" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock
+                                Grid.Column="1"
+                                Text="Input hooks only detect that input happened. DimToOff does not save key content, mouse positions, telemetry, or network data."
+                                Style="{StaticResource BodyTextStyle}" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="Privacy" Style="{StaticResource SectionTitleStyle}" />
+
+                <Border Style="{StaticResource CardStyle}">
+                    <TextBlock
+                        Text="Settings and logs stay on this PC. DimToOff does not send network requests, collect telemetry, or require administrator privileges."
+                        Style="{StaticResource BodyTextStyle}" />
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <Border
+            Grid.Row="2"
+            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="0,1,0,0">
+            <Grid Padding="24,14" ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <Button
+                    Content="GitHub"
+                    Click="GitHubButton_Click"
+                    BorderBrush="#164C8F"
+                    BorderThickness="1" />
+
+                <Button
+                    Grid.Column="2"
+                    Content="Close"
+                    Click="CloseButton_Click" />
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

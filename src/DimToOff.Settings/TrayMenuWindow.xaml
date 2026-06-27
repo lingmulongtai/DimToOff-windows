@@ -105,14 +105,14 @@
                     </Grid>
                 </Button>
 
-                <Button Style="{StaticResource MenuButtonStyle}" Click="GitHubButton_Click">
+                <Button Style="{StaticResource MenuButtonStyle}" Click="AboutButton_Click">
                     <Grid ColumnSpacing="10">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="24" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <FontIcon Glyph="&#xE71B;" FontSize="16" Foreground="#D7D7D7" VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="1" Text="GitHub" VerticalAlignment="Center" />
+                        <FontIcon Glyph="&#xE946;" FontSize="16" Foreground="#D7D7D7" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="About" VerticalAlignment="Center" />
                     </Grid>
                 </Button>
 

@@ -57,7 +57,7 @@ The solution contains two executables:
 For release packaging, run:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\Publish-Release.ps1 -Version v0.3.3
+powershell -ExecutionPolicy Bypass -File .\tools\Publish-Release.ps1 -Version v0.4.0
 ```
 
 The script creates release zips under `release\<version>`.
@@ -65,15 +65,17 @@ The script creates release zips under `release\<version>`.
 For a Microsoft Store-oriented installer, install Inno Setup 6 and run:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\Build-Installer.ps1 -Version v0.3.3
+powershell -ExecutionPolicy Bypass -File .\tools\Build-Installer.ps1 -Version v0.4.0
 ```
 
 This creates `DimToOff-<version>-setup.exe` from the standalone publish folder. The installer is per-user by default and does not require administrator privileges.
+The setup executable and its SHA256 file are written under `release\<version>`. If `ISCC.exe` is not on `PATH`, pass `-InnoSetupCompiler` with the full path to the compiler.
 
 ## Release Downloads
 
-GitHub releases provide two Windows x64 downloads:
+GitHub releases provide three Windows x64 downloads:
 
+- `DimToOff-<version>-setup.exe`: recommended for most testers. It installs DimToOff for the current user under `%LOCALAPPDATA%\Programs\DimToOff` and does not require administrator privileges.
 - `DimToOff-<version>-win-x64.zip`: standalone build. This is the largest download, but it includes the .NET runtime and Windows App SDK files needed by the tray app and WinUI settings surface.
 - `DimToOff-<version>-win-x64-small.zip`: smaller framework-dependent build. Use this when the target PC already has the .NET 8 Desktop Runtime and the Windows App Runtime required by the Windows App SDK.
 
@@ -100,7 +102,7 @@ The app appears in the Windows notification area as `DimToOff`. Build the full s
 From a published build, run:
 
 ```powershell
-.\publish\win-x64\DimToOff.exe
+.\publish\win-x64-standalone\DimToOff.exe
 ```
 
 ## Use
@@ -155,7 +157,7 @@ Default values:
 }
 ```
 
-The WinUI 3 settings screen can edit these values. `Start with Windows` uses the current user's Run key and does not require administrator privileges.
+The WinUI 3 settings screen edits the MVP-facing values. Reserved advanced flags such as `DisableWhileFullscreen` and `DisableWhenExternalMonitorConnected` are kept in the settings file for compatibility, but they are not shown in the UI until they are fully implemented. `Start with Windows` uses the current user's Run key and does not require administrator privileges.
 
 ## Logs
 
@@ -176,6 +178,7 @@ The log records app lifecycle events, brightness changes, WMI errors, display-of
 - Low-level input hooks are used only to detect that input occurred; key contents and mouse coordinates are not recorded.
 - Some touchpads or mice may generate tiny input immediately after display off. The MVP ignores input for 300 ms after turning the display off.
 - Fullscreen-game detection is outside the MVP.
+- The installer and executables are not code-signed yet. Windows SmartScreen may warn on first run.
 
 ## Troubleshooting
 

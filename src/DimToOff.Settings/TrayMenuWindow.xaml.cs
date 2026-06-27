@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using DimToOff.Settings.Models;
 using DimToOff.Settings.Services;
 using Microsoft.UI;
@@ -114,13 +113,9 @@ public sealed partial class TrayMenuWindow : Window
         Close();
     }
 
-    private void GitHubButton_Click(object sender, RoutedEventArgs e)
+    private async void AboutButton_Click(object sender, RoutedEventArgs e)
     {
-        Process.Start(new ProcessStartInfo
-        {
-            FileName = "https://github.com/lingmulongtai/DimToOff-windows",
-            UseShellExecute = true
-        });
+        await commandClient.SendAsync("about");
         Close();
     }
 

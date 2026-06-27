@@ -371,7 +371,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
                 trayIconManager.RefreshSettings();
                 break;
             case "about":
-                OpenGitHub();
+                ShowAbout();
                 break;
             case "exit":
                 ExitThread();
@@ -411,13 +411,9 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         settings.DisableWhenExternalMonitorConnected = updated.DisableWhenExternalMonitorConnected;
     }
 
-    private static void OpenGitHub()
+    private void ShowAbout()
     {
-        Process.Start(new ProcessStartInfo
-        {
-            FileName = "https://github.com/lingmulongtai/DimToOff-windows",
-            UseShellExecute = true
-        });
+        LaunchWinUiSurface("--about", reloadSettingsOnExit: false);
     }
 
     private void StartDebounceTimer()

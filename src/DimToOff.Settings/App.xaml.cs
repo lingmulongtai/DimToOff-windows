@@ -15,9 +15,12 @@ public partial class App : Application
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         LaunchOptions options = LaunchOptions.Parse();
-        window = options.Mode == LaunchMode.TrayMenu
-            ? new TrayMenuWindow(options)
-            : new MainWindow(options);
+        window = options.Mode switch
+        {
+            LaunchMode.TrayMenu => new TrayMenuWindow(options),
+            LaunchMode.About => new AboutWindow(options),
+            _ => new MainWindow(options)
+        };
         window.Activate();
     }
 }

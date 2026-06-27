@@ -18,11 +18,12 @@ if ([string]::IsNullOrWhiteSpace($SourceDir)) {
 }
 
 if ([string]::IsNullOrWhiteSpace($OutputDir)) {
-    $OutputDir = Join-Path $repoRoot "release\installer"
+    $OutputDir = Join-Path $repoRoot "release\$Version"
 }
 
 if ([string]::IsNullOrWhiteSpace($InnoSetupCompiler)) {
     $candidates = @(
+        (Join-Path $repoRoot ".tools\InnoSetup6\ISCC.exe"),
         (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe"),
         (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe")
     )
@@ -61,4 +62,12 @@ if ($LASTEXITCODE -ne 0) {
     throw "Inno Setup failed with exit code $LASTEXITCODE."
 }
 
-Get-ChildItem -LiteralPath $OutputDir -Filter "DimToOff-$Version-setup.exe"
+$setup = Get-ChildItem -LiteralPath $OutputDir -Filter "DimToOff-$Version-setup.exe" | Select-Object -First 1
+if (-not $setup) {
+    throw "Setup executable was not created in '$OutputDir'."
+}
+
+$hash = Get-FileHash -LiteralPath $setup.FullName -Algorithm SHA256
+"$($hash.Hash.ToLowerInvariant())  $($setup.Name)" | Set-Content -LiteralPath "$($setup.FullName).sha256" -Encoding ascii
+
+Get-Item -LiteralPath $setup.FullName, "$($setup.FullName).sha256"
