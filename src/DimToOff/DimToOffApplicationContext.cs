@@ -24,6 +24,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
     private readonly object stateLock = new();
     private readonly object winUiProcessLock = new();
     private readonly List<Process> winUiProcesses = new();
+    private Process? settingsProcess;
     private CancellationTokenSource? debounceCts;
     private CancellationTokenSource? brightnessSaveCts;
     private AppState state = AppState.Idle;
@@ -137,7 +138,12 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
 
     private void ShowSettings()
     {
-        LaunchWinUiSurface("--settings", reloadSettingsOnExit: true);
+        if (TryActivateExistingSettings())
+        {
+            return;
+        }
+
+        LaunchWinUiSurface("--settings", reloadSettingsOnExit: true, trackAsSettings: true);
     }
 
     private void ShowTrayMenu()
@@ -145,7 +151,31 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         LaunchWinUiSurface("--tray-menu", reloadSettingsOnExit: false);
     }
 
-    private void LaunchWinUiSurface(string mode, bool reloadSettingsOnExit)
+    private bool TryActivateExistingSettings()
+    {
+        Process? process;
+        lock (winUiProcessLock)
+        {
+            process = settingsProcess;
+            if (process is null)
+            {
+                return false;
+            }
+
+            if (process.HasExited)
+            {
+                winUiProcesses.Remove(process);
+                settingsProcess = null;
+                process.Dispose();
+                return false;
+            }
+        }
+
+        WindowActivationService.TryActivate(process, log);
+        return true;
+    }
+
+    private void LaunchWinUiSurface(string mode, bool reloadSettingsOnExit, bool trackAsSettings = false)
     {
         string? settingsAppPath = ResolveSettingsAppPath();
         if (settingsAppPath is null)
@@ -171,7 +201,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             if (process is not null)
             {
                 process.EnableRaisingEvents = true;
-                TrackWinUiProcess(process);
+                TrackWinUiProcess(process, trackAsSettings);
                 if (reloadSettingsOnExit)
                 {
                     process.Exited += (_, _) =>
@@ -191,18 +221,32 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         }
     }
 
-    private void TrackWinUiProcess(Process process)
+    private void TrackWinUiProcess(Process process, bool trackAsSettings)
     {
         lock (winUiProcessLock)
         {
             winUiProcesses.Add(process);
+            if (trackAsSettings)
+            {
+                settingsProcess = process;
+            }
         }
 
         process.Exited += (_, _) =>
         {
+            bool shouldDispose;
             lock (winUiProcessLock)
             {
-                winUiProcesses.Remove(process);
+                shouldDispose = winUiProcesses.Remove(process);
+                if (ReferenceEquals(settingsProcess, process))
+                {
+                    settingsProcess = null;
+                }
+            }
+
+            if (shouldDispose)
+            {
+                process.Dispose();
             }
         };
     }
@@ -214,6 +258,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         {
             processes = winUiProcesses.ToArray();
             winUiProcesses.Clear();
+            settingsProcess = null;
         }
 
         foreach (Process process in processes)
