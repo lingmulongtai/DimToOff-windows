@@ -54,12 +54,22 @@ The solution contains two executables:
 - `DimToOff.exe`: the tray resident app and display/brightness controller
 - `DimToOff.Settings.exe`: the WinUI 3 settings window and tray quick panel
 
-For a local self-contained Windows x64 publish, place both executables in the same output folder:
+For release packaging, run:
 
 ```powershell
-dotnet publish .\src\DimToOff\DimToOff.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=false -o .\publish\win-x64
-dotnet publish .\src\DimToOff.Settings\DimToOff.Settings.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:PublishReadyToRun=false -o .\publish\win-x64
+powershell -ExecutionPolicy Bypass -File .\tools\Publish-Release.ps1 -Version v0.3.3
 ```
+
+The script creates release zips under `release\<version>`.
+
+## Release Downloads
+
+GitHub releases provide two Windows x64 downloads:
+
+- `DimToOff-<version>-win-x64.zip`: standalone build. This is the largest download, but it includes the .NET runtime and Windows App SDK files needed by the tray app and WinUI settings surface.
+- `DimToOff-<version>-win-x64-small.zip`: smaller framework-dependent build. Use this when the target PC already has the .NET 8 Desktop Runtime and the Windows App Runtime required by the Windows App SDK.
+
+DimToOff is not published as a lone `DimToOff.exe` download because the settings window is a second WinUI executable and needs native Windows App SDK assets beside it. Downloading only the tray executable would make Settings and the tray quick panel fail to open.
 
 ## Run
 
