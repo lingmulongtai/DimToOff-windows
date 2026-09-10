@@ -25,6 +25,10 @@ internal static class User32
     public static extern bool SetForegroundWindow(nint hWnd);
 
     [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GetLastInputInfo(ref LastInputInfo lastInputInfo);
+
+    [DllImport("user32.dll", SetLastError = true)]
     public static extern nint SetWindowsHookEx(int idHook, LowLevelHookProc lpfn, nint hMod, uint dwThreadId);
 
     [DllImport("user32.dll", SetLastError = true)]
@@ -43,4 +47,12 @@ internal static class User32
 
     [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     public static extern nint GetModuleHandle(string? lpModuleName);
+
+    /// <summary>Receives the tick count of the last keyboard, mouse, or touch input.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct LastInputInfo
+    {
+        public uint cbSize;
+        public uint dwTime;
+    }
 }
