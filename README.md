@@ -33,6 +33,27 @@ The default `Blackout` mode keeps Windows awake and unlocked by placing a fullsc
 
 Set either timeout to `Never` to keep the Windows behavior for that power source.
 
+The timeout for the power source you are on is also on the tray quick panel, under `Blank after`, so the wait can be changed
+from the taskbar without opening the settings window.
+
+## Screen Savers and OEM Burn-In Protection
+
+A screen saver that starts behind a DimToOff blackout lights the panel back up, which is the one thing the blackout exists to
+avoid. `Keep screen savers off the black screen` stops that.
+
+- The Windows screen saver is refused while the black overlay is up, and switched off for as long as the guard is on. The
+  previous setting is put back when the guard stands down, so a screen saver you do use is not lost.
+- Anything else that puts a fullscreen window in front of the blackout is noticed within a second and the black overlay goes
+  back on top of it. This is what catches the OEM burn-in savers that ship with OLED laptops, such as ASUS OLED Care: they are
+  ordinary always-on-top windows rather than real screen savers, so no Windows setting keeps them away.
+- By default the guard only covers the time the screen is actually black. That is deliberate: on an OLED panel the vendor
+  protection is there for a reason, and a screen DimToOff has blanked is already the best case for the panel. `The whole time
+  DimToOff runs` is available for people who would rather hold savers off for the entire session.
+- Nothing is held after the app exits.
+
+The guard works with the `Blackout` method. `MonitorPower` has no overlay of ours to put back in front, so only the Windows
+screen saver half applies there.
+
 ## How It Works
 
 - Watches `WmiMonitorBrightnessEvent` in `root\wmi`.
@@ -41,6 +62,8 @@ Set either timeout to `Never` to keep the Windows behavior for that power source
 - Treats brightness `<= 1%` as the MVP off trigger.
 - Debounces the trigger for 800 ms, then shows a fullscreen black blanking layer by default. This keeps Windows unlocked and awake, so audio and normal background work continue.
 - `WM_SYSCOMMAND / SC_MONITORPOWER` remains available as `DisplayOffMode: "MonitorPower"` in settings, but it is not the default because some laptops route it into lock or Modern Standby behavior.
+- Refuses `WM_SYSCOMMAND / SC_SCREENSAVE` on the blackout overlay, and sweeps once a second for a fullscreen window from
+  another process that has taken the front, so an OEM burn-in saver cannot light the panel back up behind the blackout.
 - Installs low-level keyboard and mouse hooks only while the display is off by the app.
 - Restores `lastUsableBrightness`, never the minimum brightness value itself.
 - Remembers only a usable brightness level at or above `minimumRestoreBrightness`, so the last tiny step before display-off is not used as the restore target.
@@ -77,7 +100,7 @@ The solution contains two executables:
 For release packaging, run:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\Publish-Release.ps1 -Version v0.5.0
+powershell -ExecutionPolicy Bypass -File .\tools\Publish-Release.ps1 -Version v0.6.0
 ```
 
 The script creates release zips under `release\<version>`.
@@ -85,7 +108,7 @@ The script creates release zips under `release\<version>`.
 For a Microsoft Store-oriented installer, install Inno Setup 6 and run:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\Build-Installer.ps1 -Version v0.5.0
+powershell -ExecutionPolicy Bypass -File .\tools\Build-Installer.ps1 -Version v0.6.0
 ```
 
 This creates `DimToOff-<version>-setup.exe` from the standalone publish folder. The installer is per-user by default and does not require administrator privileges.
@@ -140,6 +163,7 @@ Left-click the tray icon for settings. Right-click it for the quick panel:
 
 - DimToOff enabled
 - Blank when I am away
+- Blank after (the idle timeout for the power source you are on)
 - Blank screen now
 - Restore brightness
 - Settings
@@ -186,6 +210,9 @@ Default values:
   "PreserveBrightnessOnPowerModeChange": true,
   "BrightnessGuardWindowMs": 12000,
   "BrightnessGuardTolerancePercent": 2,
+  "ScreenSaverGuardEnabled": true,
+  "ScreenSaverGuardScope": "WhileBlanked",
+  "ScreenSaverGuardSuspendsWindowsScreenSaver": true,
   "IdleBlackoutEnabled": true,
   "IdleTimeoutPluggedInSeconds": 600,
   "IdleTimeoutOnBatterySeconds": 300,
@@ -220,6 +247,10 @@ If update notifications are enabled, the log may record whether an update check 
 - Some touchpads or mice may generate tiny input immediately after display off. The MVP ignores input for 300 ms after turning the display off.
 - An away blackout never locks or suspends the session, so a Windows sign-in requirement on wake does not apply to it. Press Win+L before leaving if the PC has to be locked.
 - While away blanking is on, the PC will not sleep on its own, including on battery. Set the on-battery timeout to `Never` to leave Windows in charge there.
+- The screen saver guard recognizes a saver by its window covering a whole screen from another process. A burn-in saver that
+  draws in a smaller window, or one that bypasses the desktop window manager entirely, is outside what it can see.
+- `ScreenSaverGuardScope: "WhileRunning"` holds the Windows screen saver off even while you are using the PC. On an OLED
+  panel that is a trade against burn-in, which is why `WhileBlanked` is the default.
 - Fullscreen detection uses `SHQueryUserNotificationState`, which reports fullscreen, presentation, and busy states. A borderless fullscreen window is not always reported as fullscreen.
 - The installer and executables are not code-signed yet. Windows SmartScreen may warn on first run.
 - Update notifications require access to `api.github.com` and `github.com`. If these are blocked, manual or automatic update checks will fail without affecting screen blanking.
@@ -235,3 +266,6 @@ If update notifications are enabled, the log may record whether an update check 
 - If using external monitors, disconnect them while validating the MVP behavior on the laptop panel.
 - If the screen never blanks while you are away, check that `Blank the screen when I am away` is on, that the timeout for the current power source is not `Never`, and look for `Idle blackout postponed because ...` in the log.
 - If Windows still turns the screen off by itself, another app may be forcing it; check the log and the Windows power plan for a display timeout shorter than one minute.
+- If a screen saver still appears over the black screen, look for `Taking the screen back from ...` in the log. The name it
+  reports is the process that took the front, and the absence of that line means the saver is drawing in a way the guard
+  cannot see.
