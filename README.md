@@ -77,7 +77,7 @@ The solution contains two executables:
 For release packaging, run:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\Publish-Release.ps1 -Version v0.4.0
+powershell -ExecutionPolicy Bypass -File .\tools\Publish-Release.ps1 -Version v0.5.0
 ```
 
 The script creates release zips under `release\<version>`.
@@ -85,7 +85,7 @@ The script creates release zips under `release\<version>`.
 For a Microsoft Store-oriented installer, install Inno Setup 6 and run:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\Build-Installer.ps1 -Version v0.4.0
+powershell -ExecutionPolicy Bypass -File .\tools\Build-Installer.ps1 -Version v0.5.0
 ```
 
 This creates `DimToOff-<version>-setup.exe` from the standalone publish folder. The installer is per-user by default and does not require administrator privileges.
