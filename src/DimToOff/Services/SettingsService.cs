@@ -86,9 +86,16 @@ internal sealed class SettingsService
         settings.LastNotifiedUpdateVersion ??= string.Empty;
         settings.BrightnessGuardWindowMs = Math.Clamp(settings.BrightnessGuardWindowMs, 3000, 30000);
         settings.BrightnessGuardTolerancePercent = Math.Clamp(settings.BrightnessGuardTolerancePercent, 1, 20);
+        settings.ScreenSaverGuardScope = NormalizeScreenSaverGuardScope(settings.ScreenSaverGuardScope);
         settings.IdleTimeoutPluggedInSeconds = NormalizeIdleTimeout(settings.IdleTimeoutPluggedInSeconds);
         settings.IdleTimeoutOnBatterySeconds = NormalizeIdleTimeout(settings.IdleTimeoutOnBatterySeconds);
     }
+
+    /// <summary>The guard runs either only while the screen is blanked, or for the whole session.</summary>
+    private static string NormalizeScreenSaverGuardScope(string scope) =>
+        string.Equals(scope, "WhileRunning", StringComparison.OrdinalIgnoreCase)
+            ? "WhileRunning"
+            : "WhileBlanked";
 
     /// <summary>Zero means "never blank automatically"; anything else stays within 30 s and 6 h.</summary>
     private static int NormalizeIdleTimeout(int seconds) =>

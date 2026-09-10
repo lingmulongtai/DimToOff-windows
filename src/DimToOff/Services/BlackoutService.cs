@@ -38,6 +38,18 @@ internal sealed class BlackoutService : IDisposable
         log.Info("Blackout shown");
     }
 
+    /// <summary>True while the black overlay owns the screen.</summary>
+    public bool IsShown => form is not null;
+
+    /// <summary>
+    /// Puts the overlay back at the top of the z-order after something else jumped in front
+    /// of it, such as an OEM burn-in saver. Screen savers give up once they lose the front.
+    /// </summary>
+    public void ReclaimScreen()
+    {
+        form?.ForceTopMost();
+    }
+
     public void Hide()
     {
         if (form is not null)
@@ -175,6 +187,20 @@ internal sealed class BlackoutService : IDisposable
             }
 
             base.Dispose(disposing);
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == NativeConstants.WM_SYSCOMMAND &&
+                (m.WParam.ToInt64() & NativeConstants.SYSCOMMAND_MASK) == NativeConstants.SC_SCREENSAVE)
+            {
+                // Refuse the screen saver. The screen is already black, and letting one draw
+                // over the overlay would light the panel back up for nobody to look at.
+                m.Result = nint.Zero;
+                return;
+            }
+
+            base.WndProc(ref m);
         }
 
         protected override void OnKeyDown(KeyEventArgs e)

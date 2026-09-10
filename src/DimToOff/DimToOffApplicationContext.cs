@@ -23,6 +23,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
     private readonly BlackoutService blackoutService;
     private readonly IdleWatchService idleWatchService;
     private readonly PowerKeepAliveService powerKeepAliveService;
+    private readonly ScreenSaverGuardService screenSaverGuardService;
     private readonly UpdateCheckService updateCheckService;
     private readonly UiCommandService uiCommandService;
     private readonly TrayIconManager trayIconManager;
@@ -66,6 +67,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         blackoutService = new BlackoutService(log);
         idleWatchService = new IdleWatchService(log);
         powerKeepAliveService = new PowerKeepAliveService(log);
+        screenSaverGuardService = new ScreenSaverGuardService(log);
         updateCheckService = new UpdateCheckService(log);
         uiCommandService = new UiCommandService(log);
         trayIconManager = new TrayIconManager(settings, settingsService);
@@ -78,6 +80,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         inputHookService.UserInputDetected += OnUserInputDetected;
         blackoutService.UserInputDetected += OnUserInputDetected;
         idleWatchService.Tick += OnIdleTick;
+        screenSaverGuardService.ScreenTaken += OnScreenTaken;
         trayIconManager.SettingsRequested += (_, _) => ShowSettings();
         trayIconManager.TrayMenuRequested += (_, _) => ShowTrayMenu();
         trayIconManager.BalloonUrlRequested += OnBalloonUrlRequested;
@@ -469,6 +472,9 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         settings.IdleRespectAppDisplayRequests = updated.IdleRespectAppDisplayRequests;
         settings.IdleSkipWhileFullscreenApp = updated.IdleSkipWhileFullscreenApp;
         settings.IdleSkipWhenExternalMonitorConnected = updated.IdleSkipWhenExternalMonitorConnected;
+        settings.ScreenSaverGuardEnabled = updated.ScreenSaverGuardEnabled;
+        settings.ScreenSaverGuardScope = updated.ScreenSaverGuardScope;
+        settings.ScreenSaverGuardSuspendsWindowsScreenSaver = updated.ScreenSaverGuardSuspendsWindowsScreenSaver;
 
         if (updateSettingsChanged)
         {
@@ -914,6 +920,47 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         }
 
         powerKeepAliveService.SetMode(mode);
+        UpdateScreenSaverGuard(currentState);
+    }
+
+    /// <summary>
+    /// Decides how much of the screen DimToOff currently defends. The Windows screen saver can
+    /// be held off for the whole session, but only the black overlay can be put back in front
+    /// of an OEM burn-in saver, so the sweep runs only while that overlay is up.
+    /// </summary>
+    private void UpdateScreenSaverGuard(AppState currentState)
+    {
+        screenSaverGuardService.SuspendsWindowsScreenSaver =
+            settings.ScreenSaverGuardSuspendsWindowsScreenSaver;
+
+        bool blanked = currentState == AppState.DisplayOffByApp;
+        bool guarding = settings.Enabled &&
+            settings.ScreenSaverGuardEnabled &&
+            (GuardsWholeSession() || blanked);
+
+        screenSaverGuardService.SetActive(guarding);
+        screenSaverGuardService.SetWatchingBlackout(guarding && blanked && UseBlackoutMode());
+    }
+
+    private bool GuardsWholeSession() =>
+        string.Equals(settings.ScreenSaverGuardScope, "WhileRunning", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Something put itself in front of the black screen, most often an OEM burn-in saver.
+    /// Putting the overlay back on top hides it again, and screen savers give up once they
+    /// lose the front.
+    /// </summary>
+    private void OnScreenTaken(object? sender, string intruder)
+    {
+        lock (stateLock)
+        {
+            if (state != AppState.DisplayOffByApp)
+            {
+                return;
+            }
+        }
+
+        blackoutService.ReclaimScreen();
     }
 
     private bool IsIdleTakeoverActive()
@@ -1256,6 +1303,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             inputHookService.UserInputDetected -= OnUserInputDetected;
             blackoutService.UserInputDetected -= OnUserInputDetected;
             idleWatchService.Tick -= OnIdleTick;
+            screenSaverGuardService.ScreenTaken -= OnScreenTaken;
             trayIconManager.BalloonUrlRequested -= OnBalloonUrlRequested;
             uiCommandService.CommandReceived -= OnUiCommandReceived;
             if (messageWindow is HiddenMessageWindow hiddenMessageWindow)
@@ -1267,6 +1315,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             blackoutService.Dispose();
             idleWatchService.Dispose();
             powerKeepAliveService.Dispose();
+            screenSaverGuardService.Dispose();
             brightnessService.Dispose();
             inputHookService.Dispose();
             trayIconManager.Dispose();

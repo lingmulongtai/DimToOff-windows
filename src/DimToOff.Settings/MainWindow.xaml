@@ -301,6 +301,57 @@
                                     ValueChanged="Number_Changed" />
                             </controls:SettingRow.Action>
                         </controls:SettingRow>
+
+                        <TextBlock Text="Screen savers" Style="{StaticResource GroupTitleStyle}" />
+
+                        <controls:SettingRow
+                            Glyph="&#xE72E;"
+                            Header="Keep screen savers off the black screen"
+                            Description="An OEM burn-in saver that starts behind DimToOff lights the panel back up. This puts the black screen back in front of it.">
+                            <controls:SettingRow.Action>
+                                <ToggleSwitch
+                                    x:Name="ScreenSaverGuardToggle"
+                                    Style="{StaticResource CompactToggleStyle}"
+                                    Toggled="Setting_Changed" />
+                            </controls:SettingRow.Action>
+                        </controls:SettingRow>
+
+                        <InfoBar
+                            x:Name="ScreenSaverGuardInfo"
+                            IsOpen="True"
+                            IsClosable="False"
+                            Severity="Informational"
+                            Title="Your OLED protection is left alone the rest of the time"
+                            Message="On OLED laptops the vendor saver is there for a reason. A screen that DimToOff has blanked is already the best case for the panel, so the saver is only held off then, and only while DimToOff runs." />
+
+                        <controls:SettingRow
+                            x:Name="ScreenSaverScopeRow"
+                            Glyph="&#xE916;"
+                            Header="Hold savers off"
+                            Description="How much of the session the guard covers.">
+                            <controls:SettingRow.Action>
+                                <ComboBox
+                                    x:Name="ScreenSaverScopeCombo"
+                                    Style="{StaticResource ChoiceStyle}"
+                                    SelectionChanged="Choice_Changed">
+                                    <ComboBoxItem Content="While the screen is black" Tag="WhileBlanked" />
+                                    <ComboBoxItem Content="The whole time DimToOff runs" Tag="WhileRunning" />
+                                </ComboBox>
+                            </controls:SettingRow.Action>
+                        </controls:SettingRow>
+
+                        <controls:SettingRow
+                            x:Name="WindowsScreenSaverRow"
+                            Glyph="&#xE890;"
+                            Header="Pause the Windows screen saver too"
+                            Description="Switches the Windows screen saver off while the guard is on and turns it back on afterwards.">
+                            <controls:SettingRow.Action>
+                                <ToggleSwitch
+                                    x:Name="WindowsScreenSaverToggle"
+                                    Style="{StaticResource CompactToggleStyle}"
+                                    Toggled="Setting_Changed" />
+                            </controls:SettingRow.Action>
+                        </controls:SettingRow>
                     </StackPanel>
 
                     <StackPanel

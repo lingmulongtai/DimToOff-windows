@@ -9,7 +9,7 @@
     <Grid
         x:Name="MenuRoot"
         Width="300"
-        Height="428"
+        Height="476"
         Background="{ThemeResource SolidBackgroundFillColorQuarternaryBrush}">
         <Grid.Resources>
             <Style x:Key="MenuButtonStyle" TargetType="Button">
@@ -41,7 +41,8 @@
             CornerRadius="8"
             BorderBrush="{ThemeResource SurfaceStrokeColorFlyoutBrush}"
             BorderThickness="1">
-            <StackPanel>
+            <Grid>
+            <StackPanel x:Name="MainPage">
                 <Grid Padding="10,8,10,10" ColumnSpacing="10">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="24" />
@@ -111,6 +112,33 @@
                             VerticalAlignment="Center"
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         <TextBlock Grid.Column="1" Text="Blank when I am away" VerticalAlignment="Center" />
+                    </Grid>
+                </Button>
+
+                <Button
+                    x:Name="TimeoutButton"
+                    Style="{StaticResource MenuButtonStyle}"
+                    Click="TimeoutButton_Click">
+                    <Grid ColumnSpacing="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="24" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Glyph="&#xE916;" Style="{StaticResource MenuIconStyle}" />
+                        <TextBlock Grid.Column="1" Text="Blank after" VerticalAlignment="Center" />
+                        <TextBlock
+                            x:Name="TimeoutValueText"
+                            Grid.Column="2"
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <FontIcon
+                            Grid.Column="3"
+                            Glyph="&#xE76C;"
+                            FontSize="11"
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </Grid>
                 </Button>
 
@@ -191,6 +219,43 @@
                     </Grid>
                 </Button>
             </StackPanel>
+
+            <StackPanel x:Name="TimeoutPage" Visibility="Collapsed">
+                <Button
+                    Height="52"
+                    Style="{StaticResource MenuButtonStyle}"
+                    Click="TimeoutBackButton_Click">
+                    <Grid ColumnSpacing="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="24" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Glyph="&#xE72B;" Style="{StaticResource MenuIconStyle}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock
+                                Text="Blank after"
+                                FontSize="14"
+                                FontWeight="SemiBold"
+                                Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                            <TextBlock
+                                x:Name="TimeoutPageSubtitle"
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                    </Grid>
+                </Button>
+
+                <Rectangle Style="{StaticResource MenuSeparatorStyle}" />
+
+                <ScrollViewer
+                    Height="392"
+                    HorizontalScrollMode="Disabled"
+                    HorizontalScrollBarVisibility="Disabled"
+                    VerticalScrollBarVisibility="Auto">
+                    <StackPanel x:Name="TimeoutChoiceList" />
+                </ScrollViewer>
+            </StackPanel>
+            </Grid>
         </Border>
     </Grid>
 </Window>
