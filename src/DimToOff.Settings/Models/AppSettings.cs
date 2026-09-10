@@ -23,6 +23,9 @@ internal sealed class AppSettings
     public bool PreserveBrightnessOnPowerModeChange { get; set; } = true;
     public int BrightnessGuardWindowMs { get; set; } = 12000;
     public int BrightnessGuardTolerancePercent { get; set; } = 2;
+    public bool ScreenSaverGuardEnabled { get; set; } = true;
+    public string ScreenSaverGuardScope { get; set; } = "WhileBlanked";
+    public bool ScreenSaverGuardSuspendsWindowsScreenSaver { get; set; } = true;
     public bool IdleBlackoutEnabled { get; set; } = true;
     public int IdleTimeoutPluggedInSeconds { get; set; } = 600;
     public int IdleTimeoutOnBatterySeconds { get; set; } = 300;
