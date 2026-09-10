@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reflection;
 using DimToOff.Settings.Services;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
@@ -22,7 +23,22 @@ public sealed partial class AboutWindow : Window
         InitializeComponent();
 
         Title = "About DimToOff";
+        VersionText.Text = $"Version {GetVersionText()}";
         ConfigureWindow();
+    }
+
+    private static string GetVersionText()
+    {
+        string? informationalVersion = typeof(AboutWindow).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+
+        if (!string.IsNullOrWhiteSpace(informationalVersion))
+        {
+            int buildMetadata = informationalVersion.IndexOf('+');
+            return buildMetadata < 0 ? informationalVersion : informationalVersion[..buildMetadata];
+        }
+
+        return typeof(AboutWindow).Assembly.GetName().Version?.ToString(3) ?? "unknown";
     }
 
     private void ConfigureWindow()
