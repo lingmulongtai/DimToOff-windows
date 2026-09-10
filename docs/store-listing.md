@@ -22,7 +22,9 @@ The default Blackout mode shows a fullscreen black overlay instead of putting th
 
 DimToOff is most useful on OLED and mini-LED displays. On OLED panels, black pixels emit little to no light. On mini-LED panels, local dimming may reduce visible output. On typical LCD panels, the backlight may remain on even when the screen is black, so DimToOff can hide the desktop but may not reduce backlight power use.
 
-Privacy is intentionally simple: DimToOff does not include telemetry, analytics, advertising, or network communication. It does not record key contents, typed text, mouse coordinates, pointer paths, touchpad gestures, or input history. Low-level input hooks are used only while the app has blanked the display, and only to detect that input occurred so the display can be restored.
+DimToOff can also preserve the user's last stable brightness when Windows or supported laptop performance modes try to adjust panel brightness automatically.
+
+Privacy is intentionally simple: DimToOff does not include telemetry, analytics, advertising, or input-content logging. It only uses network access for optional GitHub release update checks. It does not record key contents, typed text, mouse coordinates, pointer paths, touchpad gestures, or input history. Low-level input hooks are used only while the app has blanked the display, and only to detect that input occurred so the display can be restored.
 
 DimToOff runs without administrator privileges. Settings are stored locally in the current user's profile.
 
@@ -32,9 +34,10 @@ DimToOff runs without administrator privileges. Settings are stored locally in t
 - Keep Windows awake, unlocked, and running in the default Blackout mode.
 - Restore brightness after keyboard, mouse, or touchpad input.
 - Avoid saving the minimum brightness itself as the restore brightness.
+- Preserve brightness after supported power or performance mode changes.
 - Configure threshold, debounce, cooldown, fade timing, and restore brightness.
 - Optional Start with Windows support for the current user.
-- No telemetry, no network communication, and no input-content logging.
+- No telemetry, no advertising, and no input-content logging. Optional update checks contact GitHub Releases.
 
 ## Search Keywords
 
@@ -60,7 +63,7 @@ DimToOff uses low-level keyboard and mouse hooks only while the app has blanked 
 
 DimToOff monitors laptop brightness through WMI to detect brightness changes and determine when to blank or restore. WMI data is used locally only.
 
-DimToOff does not use network communication, telemetry, analytics, advertising, or remote configuration.
+DimToOff does not use telemetry, analytics, advertising, or remote configuration. Optional update checks contact GitHub Releases to see whether a newer installer is available.
 
 The app may appear to keep running after the display turns black; this is expected. The default mode intentionally keeps Windows awake and unlocked rather than sleeping or locking the PC.
 

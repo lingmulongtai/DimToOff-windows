@@ -3,7 +3,13 @@ namespace DimToOff.Native;
 internal static class NativeConstants
 {
     public const int WM_SYSCOMMAND = 0x0112;
+    public const int WM_POWERBROADCAST = 0x0218;
     public const int SC_MONITORPOWER = 0xF170;
+    public const int PBT_APMPOWERSTATUSCHANGE = 0x000A;
+    public const int PBT_APMRESUMEAUTOMATIC = 0x0012;
+    public const int PBT_POWERSETTINGCHANGE = 0x8013;
+    public const int DEVICE_NOTIFY_WINDOW_HANDLE = 0x00000000;
+    public const uint EFFECTIVE_POWER_MODE_V2 = 2;
     public const int WH_KEYBOARD_LL = 13;
     public const int WH_MOUSE_LL = 14;
     public const int WM_KEYDOWN = 0x0100;

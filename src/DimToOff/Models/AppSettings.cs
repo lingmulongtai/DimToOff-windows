@@ -15,6 +15,13 @@ internal sealed class AppSettings
     public int DefaultRestoreBrightness { get; set; } = 50;
     public bool StartWithWindows { get; set; }
     public bool ShowErrorNotifications { get; set; } = true;
+    public bool CheckForUpdates { get; set; } = true;
+    public int UpdateCheckIntervalHours { get; set; } = 24;
+    public DateTimeOffset? LastUpdateCheckUtc { get; set; }
+    public string LastNotifiedUpdateVersion { get; set; } = string.Empty;
+    public bool PreserveBrightnessOnPowerModeChange { get; set; } = true;
+    public int BrightnessGuardWindowMs { get; set; } = 12000;
+    public int BrightnessGuardTolerancePercent { get; set; } = 2;
     public bool DisableWhileFullscreen { get; set; }
     public bool DisableWhenExternalMonitorConnected { get; set; }
 }

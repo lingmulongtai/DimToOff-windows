@@ -166,7 +166,7 @@
                             <FontIcon Glyph="&#xE946;" FontSize="15" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             <TextBlock
                                 Grid.Column="1"
-                                Text="Input hooks only detect that input happened. DimToOff does not save key content, mouse positions, telemetry, or network data."
+                                Text="Input hooks only detect that input happened. DimToOff does not save key content, mouse positions, telemetry, or input history."
                                 Style="{StaticResource BodyTextStyle}" />
                         </Grid>
                     </StackPanel>
@@ -176,7 +176,7 @@
 
                 <Border Style="{StaticResource CardStyle}">
                     <TextBlock
-                        Text="Settings and logs stay on this PC. DimToOff does not send network requests, collect telemetry, or require administrator privileges."
+                        Text="Settings and logs stay on this PC. If update notifications are enabled, DimToOff checks GitHub Releases for a newer installer. It does not collect telemetry or require administrator privileges."
                         Style="{StaticResource BodyTextStyle}" />
                 </Border>
             </StackPanel>

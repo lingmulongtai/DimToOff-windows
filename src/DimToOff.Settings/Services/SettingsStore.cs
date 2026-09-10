@@ -64,5 +64,9 @@ internal sealed class SettingsStore
             Math.Max(settings.DefaultRestoreBrightness, settings.MinimumRestoreBrightness),
             30,
             100);
+        settings.UpdateCheckIntervalHours = Math.Clamp(settings.UpdateCheckIntervalHours, 1, 168);
+        settings.LastNotifiedUpdateVersion ??= string.Empty;
+        settings.BrightnessGuardWindowMs = Math.Clamp(settings.BrightnessGuardWindowMs, 3000, 30000);
+        settings.BrightnessGuardTolerancePercent = Math.Clamp(settings.BrightnessGuardTolerancePercent, 1, 20);
     }
 }

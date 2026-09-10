@@ -91,6 +91,8 @@ public sealed partial class MainWindow : Window
         EnabledToggle.IsOn = settings.Enabled;
         StartWithWindowsToggle.IsOn = settings.StartWithWindows;
         ErrorNotificationsToggle.IsOn = settings.ShowErrorNotifications;
+        UpdateNotificationsToggle.IsOn = settings.CheckForUpdates;
+        PreserveBrightnessToggle.IsOn = settings.PreserveBrightnessOnPowerModeChange;
         SetComboValue(DisplayModeCombo, settings.DisplayOffMode);
 
         OffThresholdBox.Value = settings.OffThreshold;
@@ -277,6 +279,27 @@ public sealed partial class MainWindow : Window
         });
     }
 
+    private async void CheckUpdatesButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            AppSettings updated = ReadSettingsFromControls();
+            settingsStore.Save(updated);
+            StartupRegistration.SetEnabled(updated.StartWithWindows, mainExecutablePath);
+            settings = updated;
+
+            await commandClient.SendAsync("reload-settings");
+            await Task.Delay(100);
+            await commandClient.SendAsync("check-updates");
+
+            ShowSaveStatus("Checking for updates", "DimToOff will show a tray notification with the result.", InfoBarSeverity.Informational, autoDismiss: true);
+        }
+        catch (Exception ex)
+        {
+            ShowSaveStatus("Could not check updates", ex.Message, InfoBarSeverity.Error, autoDismiss: false);
+        }
+    }
+
     private void DisplayModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         UpdateModeState();
@@ -292,6 +315,13 @@ public sealed partial class MainWindow : Window
             Enabled = EnabledToggle.IsOn,
             StartWithWindows = StartWithWindowsToggle.IsOn,
             ShowErrorNotifications = ErrorNotificationsToggle.IsOn,
+            CheckForUpdates = UpdateNotificationsToggle.IsOn,
+            UpdateCheckIntervalHours = settings.UpdateCheckIntervalHours,
+            LastUpdateCheckUtc = settings.LastUpdateCheckUtc,
+            LastNotifiedUpdateVersion = settings.LastNotifiedUpdateVersion,
+            PreserveBrightnessOnPowerModeChange = PreserveBrightnessToggle.IsOn,
+            BrightnessGuardWindowMs = settings.BrightnessGuardWindowMs,
+            BrightnessGuardTolerancePercent = settings.BrightnessGuardTolerancePercent,
             DisplayOffMode = GetComboValue(DisplayModeCombo, settings.DisplayOffMode),
             OffThreshold = NumberValue(OffThresholdBox, settings.OffThreshold),
             FadeToBlackMs = NumberValue(FadeToBlackBox, settings.FadeToBlackMs),

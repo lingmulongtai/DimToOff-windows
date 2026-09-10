@@ -11,10 +11,12 @@ internal sealed class TrayIconManager : IDisposable
     private readonly AppSettings settings;
     private readonly NotifyIcon notifyIcon;
     private readonly Icon trayIcon;
+    private string? pendingBalloonUrl;
     private bool disposed;
 
     public event EventHandler? SettingsRequested;
     public event EventHandler? TrayMenuRequested;
+    public event EventHandler<string>? BalloonUrlRequested;
 
     public TrayIconManager(AppSettings settings, SettingsService settingsService)
     {
@@ -29,11 +31,12 @@ internal sealed class TrayIconManager : IDisposable
         };
 
         notifyIcon.MouseUp += OnMouseUp;
+        notifyIcon.BalloonTipClicked += OnBalloonTipClicked;
     }
 
-    public void ShowError(string title, string message)
+    public void ShowError(string title, string message, bool force = false)
     {
-        if (!settings.ShowErrorNotifications)
+        if (!force && !settings.ShowErrorNotifications)
         {
             return;
         }
@@ -41,7 +44,25 @@ internal sealed class TrayIconManager : IDisposable
         notifyIcon.BalloonTipTitle = title;
         notifyIcon.BalloonTipText = message;
         notifyIcon.BalloonTipIcon = ToolTipIcon.Error;
+        pendingBalloonUrl = null;
         notifyIcon.ShowBalloonTip(5000);
+    }
+
+    public void ShowInformation(string title, string message, string? clickUrl = null)
+    {
+        notifyIcon.BalloonTipTitle = title;
+        notifyIcon.BalloonTipText = message;
+        notifyIcon.BalloonTipIcon = ToolTipIcon.Info;
+        pendingBalloonUrl = clickUrl;
+        notifyIcon.ShowBalloonTip(7000);
+    }
+
+    public void ShowUpdateAvailable(AvailableUpdate update)
+    {
+        string installerHint = update.HasInstaller
+            ? "Click to open the release page and download the installer."
+            : "Click to open the release page.";
+        ShowInformation("DimToOff update available", $"{update.TagName} is available. {installerHint}", update.ReleaseUrl);
     }
 
     public void RefreshSettings()
@@ -60,6 +81,16 @@ internal sealed class TrayIconManager : IDisposable
         }
     }
 
+    private void OnBalloonTipClicked(object? sender, EventArgs e)
+    {
+        if (!string.IsNullOrWhiteSpace(pendingBalloonUrl))
+        {
+            BalloonUrlRequested?.Invoke(this, pendingBalloonUrl);
+        }
+
+        pendingBalloonUrl = null;
+    }
+
     public void Dispose()
     {
         if (disposed)
@@ -68,6 +99,7 @@ internal sealed class TrayIconManager : IDisposable
         }
 
         disposed = true;
+        notifyIcon.BalloonTipClicked -= OnBalloonTipClicked;
         notifyIcon.Visible = false;
         notifyIcon.Dispose();
         trayIcon.Dispose();

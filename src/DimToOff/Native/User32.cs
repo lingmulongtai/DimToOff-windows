@@ -28,6 +28,13 @@ internal static class User32
     public static extern nint SetWindowsHookEx(int idHook, LowLevelHookProc lpfn, nint hMod, uint dwThreadId);
 
     [DllImport("user32.dll", SetLastError = true)]
+    public static extern nint RegisterPowerSettingNotification(nint hRecipient, ref Guid powerSettingGuid, int flags);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool UnregisterPowerSettingNotification(nint handle);
+
+    [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool UnhookWindowsHookEx(nint hhk);
 

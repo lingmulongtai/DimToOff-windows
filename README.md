@@ -32,7 +32,9 @@ The default `Blackout` mode keeps Windows awake and unlocked by placing a fullsc
 - Keeps the system awake while the display is off by requesting `ES_SYSTEM_REQUIRED`; the app turns off the display only, not the PC.
 - Saves restore brightness only after the brightness has stayed stable for a short period, so holding the brightness-down key does not accidentally store a too-dark value.
 - Fades the blackout overlay in instead of showing it abruptly.
-- Does not store key contents, mouse coordinates, input history, telemetry, or network data.
+- Can optionally preserve the last stable brightness after Windows power mode, battery saver, AC/DC, or performance-mode changes that try to adjust panel brightness.
+- Does not store key contents, mouse coordinates, input history, telemetry, or update-check history.
+- When update notifications are enabled, contacts GitHub Releases once a day to check whether a newer installer is available.
 
 ## Build
 
@@ -123,6 +125,8 @@ Right-click the tray icon to open the WinUI 3 quick panel for:
 - About
 - Exit
 
+The settings window also includes `Preserve brightness`, `Update notifications`, and `Check now`. `Preserve brightness` restores the last stable brightness when Windows or supported OEM performance mode changes try to move the panel brightness. Update checks only read the latest GitHub Release metadata and notify when a newer installer is available. Clicking the notification opens the release page so the user can download and run the installer.
+
 ## Exit
 
 Right-click the tray icon and choose `Exit`. The app stops WMI watching and removes input hooks before the process exits.
@@ -152,6 +156,13 @@ Default values:
   "DefaultRestoreBrightness": 50,
   "StartWithWindows": false,
   "ShowErrorNotifications": true,
+  "CheckForUpdates": true,
+  "UpdateCheckIntervalHours": 24,
+  "LastUpdateCheckUtc": null,
+  "LastNotifiedUpdateVersion": "",
+  "PreserveBrightnessOnPowerModeChange": true,
+  "BrightnessGuardWindowMs": 12000,
+  "BrightnessGuardTolerancePercent": 2,
   "DisableWhileFullscreen": false,
   "DisableWhenExternalMonitorConnected": false
 }
@@ -169,6 +180,8 @@ Logs are written to:
 
 The log records app lifecycle events, brightness changes, WMI errors, display-off requests, input-detected facts, and restore attempts. It does not record key values, mouse coordinates, or input history.
 
+If update notifications are enabled, the log may record whether an update check succeeded or failed and which newer release tag was found. It does not record personal identifiers or usage analytics.
+
 ## Known Limitations
 
 - Some Windows laptops and external monitors do not expose WMI brightness events.
@@ -179,6 +192,9 @@ The log records app lifecycle events, brightness changes, WMI errors, display-of
 - Some touchpads or mice may generate tiny input immediately after display off. The MVP ignores input for 300 ms after turning the display off.
 - Fullscreen-game detection is outside the MVP.
 - The installer and executables are not code-signed yet. Windows SmartScreen may warn on first run.
+- Update notifications require access to `api.github.com` and `github.com`. If these are blocked, manual or automatic update checks will fail without affecting screen blanking.
+- Brightness preservation depends on Windows power notifications. Some OEM gaming/performance utilities may adjust brightness without sending a standard notification, so those changes may not always be caught.
+- If the user intentionally changes brightness immediately after a power/performance mode switch, `Preserve brightness` may treat that change as automatic and restore the previous stable level.
 
 ## Troubleshooting
 

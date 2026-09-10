@@ -190,6 +190,57 @@
                     </Grid>
                 </Border>
 
+                <Border Style="{StaticResource CardStyle}">
+                    <Grid Width="636" ColumnSpacing="20">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="400" />
+                            <ColumnDefinition Width="216" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Update notifications" Style="{StaticResource RowTitleStyle}" />
+                            <TextBlock Text="Check GitHub Releases once a day and notify when a new installer is available." Style="{StaticResource RowDetailStyle}" />
+                        </StackPanel>
+                        <StackPanel
+                            Grid.Column="1"
+                            Orientation="Horizontal"
+                            Spacing="10"
+                            VerticalAlignment="Center"
+                            HorizontalAlignment="Right">
+                            <Button
+                                Content="Check now"
+                                Click="CheckUpdatesButton_Click" />
+                            <ToggleSwitch
+                                x:Name="UpdateNotificationsToggle"
+                                Width="48"
+                                MinWidth="0"
+                                OnContent=""
+                                OffContent="" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource CardStyle}">
+                    <Grid Width="636" ColumnSpacing="20">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="400" />
+                            <ColumnDefinition Width="216" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Preserve brightness" Style="{StaticResource RowTitleStyle}" />
+                            <TextBlock Text="Restore stable brightness after power or performance mode changes." Style="{StaticResource RowDetailStyle}" />
+                        </StackPanel>
+                        <ToggleSwitch
+                            x:Name="PreserveBrightnessToggle"
+                            Grid.Column="1"
+                            Width="48"
+                            MinWidth="0"
+                            OnContent=""
+                            OffContent=""
+                            VerticalAlignment="Center"
+                            HorizontalAlignment="Right" />
+                    </Grid>
+                </Border>
+
                 <TextBlock Text="Blanking" Style="{StaticResource SectionTitleStyle}" />
 
                 <Border Style="{StaticResource CardStyle}">
