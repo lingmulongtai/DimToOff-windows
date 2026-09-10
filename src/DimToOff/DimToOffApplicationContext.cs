@@ -32,6 +32,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
     private CancellationTokenSource? updateCheckCts;
     private CancellationTokenSource? brightnessGuardRestoreCts;
     private AppState state = AppState.Idle;
+    private BlackoutTrigger blackoutTrigger = BlackoutTrigger.Manual;
     private int lastUsableBrightness;
     private int lastStableBrightness;
     private int brightnessGuardTarget;
@@ -371,7 +372,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         switch (name)
         {
             case "blank":
-                TurnDisplayOffByApp();
+                TurnDisplayOffByApp(BlackoutTrigger.Manual);
                 break;
             case "restore":
                 _ = RestoreBrightnessAfterWakeAsync();
@@ -731,7 +732,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
                 int? current = brightnessService.GetCurrentBrightness();
                 if (current.HasValue && current.Value <= settings.OffThreshold)
                 {
-                    PostToUiThread(() => TurnDisplayOffByApp(force: false));
+                    PostToUiThread(() => TurnDisplayOffByApp(BlackoutTrigger.Brightness));
                     return;
                 }
 
@@ -754,7 +755,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         });
     }
 
-    private void TurnDisplayOffByApp(bool force = true)
+    private void TurnDisplayOffByApp(BlackoutTrigger trigger)
     {
         lock (stateLock)
         {
@@ -770,8 +771,11 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             }
 
             state = AppState.DisplayOffByApp;
+            blackoutTrigger = trigger;
             lastOffTime = DateTimeOffset.Now;
         }
+
+        log.Info($"Blanking the screen ({trigger})");
 
         CancelPendingDisplayOff();
         CancelPendingBrightnessSave();
@@ -832,8 +836,13 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
                 await Task.Delay(700);
             }
 
-            int target = CalculateRestoreBrightness();
-            await Task.Run(() => brightnessService.SetBrightness(target));
+            // Idle and manual blanking never touched the panel brightness, so waking must not either.
+            if (blackoutTrigger == BlackoutTrigger.Brightness)
+            {
+                int target = CalculateRestoreBrightness();
+                await Task.Run(() => brightnessService.SetBrightness(target));
+            }
+
             displayPowerService.AllowNormalSleepPolicy();
 
             lock (stateLock)
