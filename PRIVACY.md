@@ -35,6 +35,8 @@ When brightness preservation is enabled, DimToOff also listens for local Windows
 
 DimToOff uses low-level keyboard and mouse hooks only while the display is blanked by the app. The hooks are used only to detect that user input occurred so the app can restore the display and brightness.
 
+To decide when the user has stepped away, DimToOff also asks Windows how long ago the last input happened, through `GetLastInputInfo`. That call returns a timestamp only. It exposes no key, button, or coordinate information, and DimToOff stores no history of it.
+
 DimToOff does not store:
 
 - key values,
@@ -65,7 +67,8 @@ The settings file can include values such as:
 - whether DimToOff starts with Windows,
 - update notification preference,
 - last update check timestamp,
-- last release version already notified.
+- last release version already notified,
+- away blanking preference and its idle timeouts.
 
 ## Local Logs
 
@@ -85,6 +88,10 @@ Logs can include:
 - startup registration changes.
 
 Logs do not include key contents, mouse coordinates, input history, telemetry identifiers, or network identifiers. If update notifications are enabled, logs may include update check failures or the newer release tag found.
+
+## Windows Power Settings
+
+When away blanking is enabled, DimToOff periodically tells Windows that the machine is in use, so Windows does not reach its own display-off or sleep timeout while the app runs. This uses the standard `SetThreadExecutionState` call. DimToOff does not read, write, or modify Windows power plans, and the behavior stops as soon as the app exits.
 
 ## Start With Windows
 
