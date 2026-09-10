@@ -10,6 +10,9 @@ namespace DimToOff;
 
 internal sealed class DimToOffApplicationContext : ApplicationContext
 {
+    /// <summary>Slack for poll jitter when comparing input timestamps.</summary>
+    private const int InputDetectionEpsilonMs = 250;
+
     private readonly LogService log;
     private readonly SettingsService settingsService;
     private readonly StartupService startupService;
@@ -18,6 +21,8 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
     private readonly DisplayPowerService displayPowerService;
     private readonly InputHookService inputHookService;
     private readonly BlackoutService blackoutService;
+    private readonly IdleWatchService idleWatchService;
+    private readonly PowerKeepAliveService powerKeepAliveService;
     private readonly UpdateCheckService updateCheckService;
     private readonly UiCommandService uiCommandService;
     private readonly TrayIconManager trayIconManager;
@@ -37,6 +42,8 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
     private int lastStableBrightness;
     private int brightnessGuardTarget;
     private DateTimeOffset lastOffTime;
+    private long blackoutLastInputTick;
+    private string idleHoldReason = string.Empty;
     private DateTimeOffset brightnessGuardArmedUntil = DateTimeOffset.MinValue;
     private DateTimeOffset suppressBrightnessGuardUntil = DateTimeOffset.MinValue;
     private DateTimeOffset suppressAutoOffUntil = DateTimeOffset.MinValue;
@@ -57,6 +64,8 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         displayPowerService = new DisplayPowerService(log);
         inputHookService = new InputHookService(log);
         blackoutService = new BlackoutService(log);
+        idleWatchService = new IdleWatchService(log);
+        powerKeepAliveService = new PowerKeepAliveService(log);
         updateCheckService = new UpdateCheckService(log);
         uiCommandService = new UiCommandService(log);
         trayIconManager = new TrayIconManager(settings, settingsService);
@@ -68,6 +77,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         brightnessService.BrightnessChanged += OnBrightnessChanged;
         inputHookService.UserInputDetected += OnUserInputDetected;
         blackoutService.UserInputDetected += OnUserInputDetected;
+        idleWatchService.Tick += OnIdleTick;
         trayIconManager.SettingsRequested += (_, _) => ShowSettings();
         trayIconManager.TrayMenuRequested += (_, _) => ShowTrayMenu();
         trayIconManager.BalloonUrlRequested += OnBalloonUrlRequested;
@@ -77,6 +87,8 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         InitializeBrightness();
         uiCommandService.Start();
         brightnessService.StartWatching();
+        idleWatchService.Start();
+        UpdateKeepAliveMode();
         RestartUpdateChecks();
     }
 
@@ -456,6 +468,8 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         {
             RestartUpdateChecks();
         }
+
+        UpdateKeepAliveMode();
     }
 
     private void ShowAbout()
@@ -465,6 +479,8 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
 
     private void OnPowerModeMayHaveChanged(object? sender, EventArgs e)
     {
+        UpdateKeepAliveMode();
+
         if (!settings.Enabled || !settings.PreserveBrightnessOnPowerModeChange)
         {
             return;
@@ -779,7 +795,10 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
 
         CancelPendingDisplayOff();
         CancelPendingBrightnessSave();
-        displayPowerService.PreventSystemSleepWhileDisplayIsBlanked();
+        blackoutLastInputTick = GetLastInputTick();
+        idleHoldReason = string.Empty;
+        idleWatchService.SetWakeWatchEnabled(true);
+        UpdateKeepAliveMode();
 
         if (UseBlackoutMode())
         {
@@ -791,6 +810,151 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             displayPowerService.TurnOffDisplay();
         }
     }
+
+    /// <summary>
+    /// Runs once a second. While the idle takeover is on, Windows never reaches its own
+    /// display-off or sleep timeout, so this is what blanks the screen instead, and what
+    /// notices the user coming back.
+    /// </summary>
+    private void OnIdleTick(object? sender, TimeSpan idleTime)
+    {
+        AppState currentState;
+        DateTimeOffset suppressUntil;
+        lock (stateLock)
+        {
+            currentState = state;
+            suppressUntil = suppressAutoOffUntil;
+        }
+
+        if (currentState == AppState.DisplayOffByApp)
+        {
+            if (HasUserInputSinceBlackout(idleTime))
+            {
+                OnUserInputDetected(this, EventArgs.Empty);
+            }
+
+            return;
+        }
+
+        UpdateKeepAliveMode();
+
+        if (currentState != AppState.Idle || !IsIdleTakeoverActive())
+        {
+            return;
+        }
+
+        int timeoutSeconds = GetIdleTimeoutSeconds();
+        if (idleTime.TotalSeconds < timeoutSeconds || DateTimeOffset.Now < suppressUntil)
+        {
+            return;
+        }
+
+        if (TryGetIdleHoldReason(out string reason))
+        {
+            if (!string.Equals(idleHoldReason, reason, StringComparison.Ordinal))
+            {
+                idleHoldReason = reason;
+                log.Info($"Idle blackout postponed because {reason}");
+            }
+
+            return;
+        }
+
+        idleHoldReason = string.Empty;
+        log.Info($"Idle timeout of {timeoutSeconds}s reached");
+        TurnDisplayOffByApp(BlackoutTrigger.Idle);
+    }
+
+    /// <summary>
+    /// True once the user has produced real input after the screen was blanked. Comparing
+    /// input timestamps keeps synthesized mouse traffic from waking the screen by itself.
+    /// </summary>
+    private bool HasUserInputSinceBlackout(TimeSpan idleTime)
+    {
+        if ((DateTimeOffset.Now - lastOffTime).TotalMilliseconds < settings.IgnoreInputMs)
+        {
+            return false;
+        }
+
+        long lastInputTick = Environment.TickCount64 - (long)idleTime.TotalMilliseconds;
+        return lastInputTick - blackoutLastInputTick > InputDetectionEpsilonMs;
+    }
+
+    private static long GetLastInputTick() =>
+        Environment.TickCount64 - (long)IdleWatchService.GetIdleTime().TotalMilliseconds;
+
+    /// <summary>
+    /// Decides how much of the Windows idle policy DimToOff currently overrides.
+    /// Nothing is held continuously, so quitting the app hands the policy straight back.
+    /// </summary>
+    private void UpdateKeepAliveMode()
+    {
+        AppState currentState;
+        lock (stateLock)
+        {
+            currentState = state;
+        }
+
+        KeepAliveMode mode;
+        if (currentState == AppState.DisplayOffByApp)
+        {
+            // The overlay is what the user sees as "screen off", so the panel stays powered.
+            mode = UseBlackoutMode() ? KeepAliveMode.DisplayAndSystem : KeepAliveMode.SystemOnly;
+        }
+        else
+        {
+            mode = IsIdleTakeoverActive() ? KeepAliveMode.DisplayAndSystem : KeepAliveMode.Off;
+        }
+
+        powerKeepAliveService.SetMode(mode);
+    }
+
+    private bool IsIdleTakeoverActive()
+    {
+        if (!settings.Enabled || !settings.IdleBlackoutEnabled || GetIdleTimeoutSeconds() <= 0)
+        {
+            return false;
+        }
+
+        return !settings.IdleSkipWhenExternalMonitorConnected || !IsExternalMonitorConnected();
+    }
+
+    private int GetIdleTimeoutSeconds() =>
+        SystemInformation.PowerStatus.PowerLineStatus == PowerLineStatus.Offline
+            ? settings.IdleTimeoutOnBatterySeconds
+            : settings.IdleTimeoutPluggedInSeconds;
+
+    private bool TryGetIdleHoldReason(out string reason)
+    {
+        if (settings.IdleSkipWhileFullscreenApp && IsFullscreenAppActive())
+        {
+            reason = "a fullscreen app is in the foreground";
+            return true;
+        }
+
+        if (settings.IdleRespectAppDisplayRequests && powerKeepAliveService.IsDisplayRequestedByAnotherApp())
+        {
+            reason = "another app is keeping the display on";
+            return true;
+        }
+
+        reason = string.Empty;
+        return false;
+    }
+
+    private static bool IsFullscreenAppActive()
+    {
+        if (Shell32.SHQueryUserNotificationState(out Shell32.UserNotificationState state) != 0)
+        {
+            return false;
+        }
+
+        return state is Shell32.UserNotificationState.Busy
+            or Shell32.UserNotificationState.RunningDirect3DFullScreen
+            or Shell32.UserNotificationState.PresentationMode;
+    }
+
+    private static bool IsExternalMonitorConnected() => Screen.AllScreens.Length > 1;
 
     private void OnUserInputDetected(object? sender, EventArgs e)
     {
@@ -843,13 +1007,15 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
                 await Task.Run(() => brightnessService.SetBrightness(target));
             }
 
-            displayPowerService.AllowNormalSleepPolicy();
+            idleWatchService.SetWakeWatchEnabled(false);
 
             lock (stateLock)
             {
                 state = AppState.Cooldown;
                 suppressAutoOffUntil = DateTimeOffset.Now.AddSeconds(5);
             }
+
+            UpdateKeepAliveMode();
 
             await Task.Delay(settings.CooldownMs);
 
@@ -862,7 +1028,8 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         {
             log.Error("Failed to restore brightness", ex);
             blackoutService.Hide();
-            displayPowerService.AllowNormalSleepPolicy();
+            idleWatchService.SetWakeWatchEnabled(false);
+            UpdateKeepAliveMode();
             trayIconManager.ShowError("DimToOff", "Failed to restore brightness. See the log for details.");
 
             lock (stateLock)
@@ -883,13 +1050,15 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             }
 
             blackoutService.Hide();
-            displayPowerService.AllowNormalSleepPolicy();
+            idleWatchService.SetWakeWatchEnabled(false);
 
             lock (stateLock)
             {
                 state = AppState.Cooldown;
                 suppressAutoOffUntil = DateTimeOffset.Now.AddSeconds(2);
             }
+
+            UpdateKeepAliveMode();
 
             await Task.Delay(settings.CooldownMs);
 
@@ -902,7 +1071,8 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         {
             log.Error("Failed to hide blackout after brightness returned", ex);
             blackoutService.Hide();
-            displayPowerService.AllowNormalSleepPolicy();
+            idleWatchService.SetWakeWatchEnabled(false);
+            UpdateKeepAliveMode();
 
             lock (stateLock)
             {
@@ -1078,6 +1248,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             brightnessService.BrightnessChanged -= OnBrightnessChanged;
             inputHookService.UserInputDetected -= OnUserInputDetected;
             blackoutService.UserInputDetected -= OnUserInputDetected;
+            idleWatchService.Tick -= OnIdleTick;
             trayIconManager.BalloonUrlRequested -= OnBalloonUrlRequested;
             uiCommandService.CommandReceived -= OnUiCommandReceived;
             if (messageWindow is HiddenMessageWindow hiddenMessageWindow)
@@ -1087,7 +1258,8 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             uiCommandService.Dispose();
             updateCheckService.Dispose();
             blackoutService.Dispose();
-            displayPowerService.AllowNormalSleepPolicy();
+            idleWatchService.Dispose();
+            powerKeepAliveService.Dispose();
             brightnessService.Dispose();
             inputHookService.Dispose();
             trayIconManager.Dispose();

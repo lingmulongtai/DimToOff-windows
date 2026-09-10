@@ -8,7 +8,6 @@ internal static class NativeConstants
     public const int PBT_APMPOWERSTATUSCHANGE = 0x000A;
     public const int PBT_APMRESUMEAUTOMATIC = 0x0012;
     public const int PBT_POWERSETTINGCHANGE = 0x8013;
-    public const int WM_DISPLAYCHANGE = 0x007E;
     public const int DEVICE_NOTIFY_WINDOW_HANDLE = 0x00000000;
     public const uint EFFECTIVE_POWER_MODE_V2 = 2;
     public const int WH_KEYBOARD_LL = 13;
