@@ -13,6 +13,15 @@ $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $standaloneDir = Join-Path $repoRoot "publish\win-x64-standalone"
 $smallDir = Join-Path $repoRoot "publish\win-x64-small"
 $artifactDir = Join-Path $repoRoot "release\$Version"
+$appVersion = $Version -replace '^[vV]', ''
+$assemblyVersion = if (($appVersion -split '\.').Length -eq 3) { "$appVersion.0" } else { $appVersion }
+$versionProperties = @(
+    "/p:Version=$appVersion",
+    "/p:AssemblyVersion=$assemblyVersion",
+    "/p:FileVersion=$assemblyVersion",
+    "/p:InformationalVersion=$appVersion",
+    "/p:IncludeSourceRevisionInInformationalVersion=false"
+)
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
@@ -52,13 +61,13 @@ try {
     Remove-Item -LiteralPath $standaloneDir, $smallDir, $artifactDir -Recurse -Force -ErrorAction SilentlyContinue
     New-Item -ItemType Directory -Path $standaloneDir, $smallDir, $artifactDir | Out-Null
 
-    Invoke-DotNet build ".\DimToOff.sln" "-c" $Configuration
+    Invoke-DotNet build ".\DimToOff.sln" "-c" $Configuration @versionProperties
 
-    Invoke-DotNet publish ".\src\DimToOff.Settings\DimToOff.Settings.csproj" "-c" $Configuration "-r" "win-x64" "--self-contained" "true" "-o" $standaloneDir "/p:WindowsAppSDKSelfContained=true" "/p:PublishSingleFile=false" "/p:PublishReadyToRun=false"
-    Invoke-DotNet publish ".\src\DimToOff\DimToOff.csproj" "-c" $Configuration "-r" "win-x64" "--self-contained" "true" "-o" $standaloneDir "/p:PublishSingleFile=false" "/p:PublishReadyToRun=false"
+    Invoke-DotNet publish ".\src\DimToOff.Settings\DimToOff.Settings.csproj" "-c" $Configuration "-r" "win-x64" "--self-contained" "true" "-o" $standaloneDir "/p:WindowsAppSDKSelfContained=true" "/p:PublishSingleFile=false" "/p:PublishReadyToRun=false" @versionProperties
+    Invoke-DotNet publish ".\src\DimToOff\DimToOff.csproj" "-c" $Configuration "-r" "win-x64" "--self-contained" "true" "-o" $standaloneDir "/p:PublishSingleFile=false" "/p:PublishReadyToRun=false" @versionProperties
 
-    Invoke-DotNet publish ".\src\DimToOff.Settings\DimToOff.Settings.csproj" "-c" $Configuration "-r" "win-x64" "--self-contained" "false" "-o" $smallDir "/p:WindowsAppSDKSelfContained=false" "/p:PublishSingleFile=false" "/p:PublishReadyToRun=false"
-    Invoke-DotNet publish ".\src\DimToOff\DimToOff.csproj" "-c" $Configuration "-r" "win-x64" "--self-contained" "false" "-o" $smallDir "/p:PublishSingleFile=false" "/p:PublishReadyToRun=false"
+    Invoke-DotNet publish ".\src\DimToOff.Settings\DimToOff.Settings.csproj" "-c" $Configuration "-r" "win-x64" "--self-contained" "false" "-o" $smallDir "/p:WindowsAppSDKSelfContained=false" "/p:PublishSingleFile=false" "/p:PublishReadyToRun=false" @versionProperties
+    Invoke-DotNet publish ".\src\DimToOff\DimToOff.csproj" "-c" $Configuration "-r" "win-x64" "--self-contained" "false" "-o" $smallDir "/p:PublishSingleFile=false" "/p:PublishReadyToRun=false" @versionProperties
 
     $standaloneZip = "DimToOff-$Version-win-x64.zip"
     $smallZip = "DimToOff-$Version-win-x64-small.zip"
