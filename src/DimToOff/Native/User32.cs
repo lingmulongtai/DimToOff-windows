@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace DimToOff.Native;
 
@@ -28,6 +29,29 @@ internal static class User32
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool GetLastInputInfo(ref LastInputInfo lastInputInfo);
 
+    /// <summary>Reads a system parameter whose value is a BOOL, such as the screen saver state.</summary>
+    [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SystemParametersInfo(uint action, uint uiParam, out int pvParam, uint winIni);
+
+    /// <summary>Writes a system parameter whose value travels in uiParam.</summary>
+    [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SystemParametersInfo(uint action, uint uiParam, nint pvParam, uint winIni);
+
+    [DllImport("user32.dll")]
+    public static extern nint GetForegroundWindow();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern uint GetWindowThreadProcessId(nint hWnd, out uint processId);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern int GetClassName(nint hWnd, StringBuilder className, int maxCount);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GetWindowRect(nint hWnd, out Rect rect);
+
     [DllImport("user32.dll", SetLastError = true)]
     public static extern nint SetWindowsHookEx(int idHook, LowLevelHookProc lpfn, nint hMod, uint dwThreadId);
 
@@ -51,6 +75,20 @@ internal static class User32
 
     [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     public static extern nint GetModuleHandle(string? lpModuleName);
+
+    /// <summary>Screen coordinates of a window, in physical pixels.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct Rect
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+
+        public int Width => Right - Left;
+
+        public int Height => Bottom - Top;
+    }
 
     /// <summary>Receives the tick count of the last keyboard, mouse, or touch input.</summary>
     [StructLayout(LayoutKind.Sequential)]

@@ -5,6 +5,9 @@ internal static class NativeConstants
     public const int WM_SYSCOMMAND = 0x0112;
     public const int WM_POWERBROADCAST = 0x0218;
     public const int SC_MONITORPOWER = 0xF170;
+    public const int SC_SCREENSAVE = 0xF140;
+    /// <summary>WM_SYSCOMMAND reserves the low four bits of wParam for the system.</summary>
+    public const int SYSCOMMAND_MASK = 0xFFF0;
     public const int PBT_APMPOWERSTATUSCHANGE = 0x000A;
     public const int PBT_APMRESUMEAUTOMATIC = 0x0012;
     public const int PBT_POWERSETTINGCHANGE = 0x8013;
@@ -24,6 +27,11 @@ internal static class NativeConstants
     public const uint SWP_NOSIZE = 0x0001;
     public const uint SWP_NOMOVE = 0x0002;
     public const uint SWP_SHOWWINDOW = 0x0040;
+    public const uint SWP_NOACTIVATE = 0x0010;
+    public const uint SPI_GETSCREENSAVEACTIVE = 0x0010;
+    public const uint SPI_SETSCREENSAVEACTIVE = 0x0011;
+    public const uint SPI_GETSCREENSAVERRUNNING = 0x0072;
+    public const uint SPIF_SENDCHANGE = 0x0002;
     public const int WS_EX_TOPMOST = 0x00000008;
     public const int WS_EX_TOOLWINDOW = 0x00000080;
 }
