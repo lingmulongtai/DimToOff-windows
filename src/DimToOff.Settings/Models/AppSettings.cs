@@ -22,6 +22,10 @@ internal sealed class AppSettings
     public bool PreserveBrightnessOnPowerModeChange { get; set; } = true;
     public int BrightnessGuardWindowMs { get; set; } = 12000;
     public int BrightnessGuardTolerancePercent { get; set; } = 2;
-    public bool DisableWhileFullscreen { get; set; }
-    public bool DisableWhenExternalMonitorConnected { get; set; }
+    public bool IdleBlackoutEnabled { get; set; } = true;
+    public int IdleTimeoutPluggedInSeconds { get; set; } = 600;
+    public int IdleTimeoutOnBatterySeconds { get; set; } = 300;
+    public bool IdleRespectAppDisplayRequests { get; set; } = true;
+    public bool IdleSkipWhileFullscreenApp { get; set; } = true;
+    public bool IdleSkipWhenExternalMonitorConnected { get; set; }
 }

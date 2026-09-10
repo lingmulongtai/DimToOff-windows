@@ -444,8 +444,12 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         settings.PreserveBrightnessOnPowerModeChange = updated.PreserveBrightnessOnPowerModeChange;
         settings.BrightnessGuardWindowMs = updated.BrightnessGuardWindowMs;
         settings.BrightnessGuardTolerancePercent = updated.BrightnessGuardTolerancePercent;
-        settings.DisableWhileFullscreen = updated.DisableWhileFullscreen;
-        settings.DisableWhenExternalMonitorConnected = updated.DisableWhenExternalMonitorConnected;
+        settings.IdleBlackoutEnabled = updated.IdleBlackoutEnabled;
+        settings.IdleTimeoutPluggedInSeconds = updated.IdleTimeoutPluggedInSeconds;
+        settings.IdleTimeoutOnBatterySeconds = updated.IdleTimeoutOnBatterySeconds;
+        settings.IdleRespectAppDisplayRequests = updated.IdleRespectAppDisplayRequests;
+        settings.IdleSkipWhileFullscreenApp = updated.IdleSkipWhileFullscreenApp;
+        settings.IdleSkipWhenExternalMonitorConnected = updated.IdleSkipWhenExternalMonitorConnected;
 
         if (updateSettingsChanged)
         {

@@ -332,8 +332,12 @@ public sealed partial class MainWindow : Window
             RestoreMode = settings.RestoreMode,
             MinimumRestoreBrightness = minimumRestore,
             DefaultRestoreBrightness = defaultRestore,
-            DisableWhileFullscreen = settings.DisableWhileFullscreen,
-            DisableWhenExternalMonitorConnected = settings.DisableWhenExternalMonitorConnected
+            IdleBlackoutEnabled = settings.IdleBlackoutEnabled,
+            IdleTimeoutPluggedInSeconds = settings.IdleTimeoutPluggedInSeconds,
+            IdleTimeoutOnBatterySeconds = settings.IdleTimeoutOnBatterySeconds,
+            IdleRespectAppDisplayRequests = settings.IdleRespectAppDisplayRequests,
+            IdleSkipWhileFullscreenApp = settings.IdleSkipWhileFullscreenApp,
+            IdleSkipWhenExternalMonitorConnected = settings.IdleSkipWhenExternalMonitorConnected
         };
     }
 

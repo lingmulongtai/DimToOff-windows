@@ -68,5 +68,11 @@ internal sealed class SettingsStore
         settings.LastNotifiedUpdateVersion ??= string.Empty;
         settings.BrightnessGuardWindowMs = Math.Clamp(settings.BrightnessGuardWindowMs, 3000, 30000);
         settings.BrightnessGuardTolerancePercent = Math.Clamp(settings.BrightnessGuardTolerancePercent, 1, 20);
+        settings.IdleTimeoutPluggedInSeconds = NormalizeIdleTimeout(settings.IdleTimeoutPluggedInSeconds);
+        settings.IdleTimeoutOnBatterySeconds = NormalizeIdleTimeout(settings.IdleTimeoutOnBatterySeconds);
     }
+
+    /// <summary>Zero means "never blank automatically"; anything else stays within 30 s and 6 h.</summary>
+    private static int NormalizeIdleTimeout(int seconds) =>
+        seconds <= 0 ? 0 : Math.Clamp(seconds, 30, 21600);
 }
