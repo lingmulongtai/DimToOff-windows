@@ -10,8 +10,8 @@ namespace DimToOff.Settings;
 
 public sealed partial class TrayMenuWindow : Window
 {
-    private const int MenuWidth = 286;
-    private const int MenuHeight = 334;
+    private const int MenuWidth = 300;
+    private const int MenuHeight = 428;
 
     private readonly TrayCommandClient commandClient;
     private readonly SettingsStore settingsStore = new();
@@ -56,6 +56,14 @@ public sealed partial class TrayMenuWindow : Window
         settings = settingsStore.Load();
         settings.StartWithWindows = StartupRegistration.IsEnabled();
         UpdateCheckMarks();
+    }
+
+    private async void IdleBlackoutButton_Click(object sender, RoutedEventArgs e)
+    {
+        settings.IdleBlackoutEnabled = !settings.IdleBlackoutEnabled;
+        settingsStore.Save(settings);
+        UpdateCheckMarks();
+        await commandClient.SendAsync("reload-settings");
     }
 
     private void OnActivated(object sender, WindowActivatedEventArgs args)
@@ -128,6 +136,48 @@ public sealed partial class TrayMenuWindow : Window
     private void UpdateCheckMarks()
     {
         EnabledCheck.Visibility = settings.Enabled ? Visibility.Visible : Visibility.Collapsed;
+        IdleBlackoutCheck.Visibility = settings.IdleBlackoutEnabled ? Visibility.Visible : Visibility.Collapsed;
         StartWithWindowsCheck.Visibility = settings.StartWithWindows ? Visibility.Visible : Visibility.Collapsed;
+        StatusText.Text = BuildStatusText();
+    }
+
+    private string BuildStatusText()
+    {
+        if (!settings.Enabled)
+        {
+            return "Paused";
+        }
+
+        int timeoutSeconds = PowerSource.IsOnBattery()
+            ? settings.IdleTimeoutOnBatterySeconds
+            : settings.IdleTimeoutPluggedInSeconds;
+
+        if (!settings.IdleBlackoutEnabled || timeoutSeconds <= 0)
+        {
+            return settings.BrightnessBlackoutEnabled
+                ? "Blanks at minimum brightness"
+                : "No blanking trigger is on";
+        }
+
+        return $"Screen off after {FormatDuration(timeoutSeconds)} idle";
+    }
+
+    private static string FormatDuration(int seconds)
+    {
+        if (seconds < 60)
+        {
+            return $"{seconds} seconds";
+        }
+
+        int minutes = seconds / 60;
+        if (minutes < 60)
+        {
+            return minutes == 1 ? "1 minute" : $"{minutes} minutes";
+        }
+
+        int hours = minutes / 60;
+        int remainingMinutes = minutes % 60;
+        string hourText = hours == 1 ? "1 hour" : $"{hours} hours";
+        return remainingMinutes == 0 ? hourText : $"{hourText} {remainingMinutes} min";
     }
 }

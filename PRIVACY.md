@@ -6,7 +6,7 @@ DimToOff is a Windows tray utility that turns the display dark or requests displ
 
 ## Summary
 
-- DimToOff does not send data over the network.
+- DimToOff only uses network access for optional GitHub release update checks.
 - DimToOff does not include telemetry, analytics, advertising, or crash-report upload code.
 - DimToOff does not record key contents.
 - DimToOff does not record mouse coordinates, pointer paths, touchpad gestures, or input history.
@@ -15,9 +15,9 @@ DimToOff is a Windows tray utility that turns the display dark or requests displ
 
 ## Network Communication
 
-DimToOff does not make network requests and does not transmit data to the developer, Microsoft, or any third party.
+When update notifications are enabled, DimToOff contacts GitHub Releases to check whether a newer installer is available. This request goes to GitHub and contains normal HTTPS request metadata such as the client IP address and user agent. DimToOff does not add personal identifiers, telemetry IDs, key contents, mouse coordinates, screen contents, settings files, or logs to the request.
 
-The app can open the project GitHub page only when the user explicitly clicks the GitHub button. That action opens the user's default browser.
+The app can also open the project GitHub page or a release page when the user explicitly clicks a GitHub button or an update notification. That action opens the user's default browser.
 
 ## Telemetry and Analytics
 
@@ -29,9 +29,13 @@ DimToOff monitors the built-in display brightness through Windows WMI, including
 
 The app may also poll the current brightness as a fallback when WMI events are unavailable or delayed.
 
+When brightness preservation is enabled, DimToOff also listens for local Windows power mode and power setting notifications. It uses those notifications only to decide whether a power or performance mode change appears to have adjusted display brightness.
+
 ## Keyboard, Mouse, and Touchpad Input
 
 DimToOff uses low-level keyboard and mouse hooks only while the display is blanked by the app. The hooks are used only to detect that user input occurred so the app can restore the display and brightness.
+
+To decide when the user has stepped away, DimToOff also asks Windows how long ago the last input happened, through `GetLastInputInfo`. That call returns a timestamp only. It exposes no key, button, or coordinate information, and DimToOff stores no history of it.
 
 DimToOff does not store:
 
@@ -60,7 +64,11 @@ The settings file can include values such as:
 - debounce and cooldown timing,
 - fade timing,
 - restore brightness preferences,
-- whether DimToOff starts with Windows.
+- whether DimToOff starts with Windows,
+- update notification preference,
+- last update check timestamp,
+- last release version already notified,
+- away blanking preference and its idle timeouts.
 
 ## Local Logs
 
@@ -79,7 +87,11 @@ Logs can include:
 - restore failures,
 - startup registration changes.
 
-Logs do not include key contents, mouse coordinates, input history, telemetry identifiers, or network identifiers.
+Logs do not include key contents, mouse coordinates, input history, telemetry identifiers, or network identifiers. If update notifications are enabled, logs may include update check failures or the newer release tag found.
+
+## Windows Power Settings
+
+When away blanking is enabled, DimToOff periodically tells Windows that the machine is in use, so Windows does not reach its own display-off or sleep timeout while the app runs. This uses the standard `SetThreadExecutionState` call. DimToOff does not read, write, or modify Windows power plans, and the behavior stops as soon as the app exits.
 
 ## Start With Windows
 

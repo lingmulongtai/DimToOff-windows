@@ -62,10 +62,13 @@ WiX/MSI may be worth revisiting later if enterprise deployment, MSI transforms, 
 - [ ] Explain that typical LCD backlights may remain on.
 - [ ] Explain that `MonitorPower` mode may lock, sleep, or affect multiple displays on some machines.
 - [ ] Explain WMI brightness monitoring.
+- [ ] Explain local power mode notifications used for brightness preservation.
+- [ ] Explain idle detection through `GetLastInputInfo` and that only a timestamp is read.
+- [ ] Explain that away blanking suspends the Windows screen timeout and sleep while the app runs, without editing power plans.
 - [ ] Explain low-level input hooks.
 - [ ] State clearly that key contents are not stored.
 - [ ] State clearly that mouse coordinates and input history are not stored.
-- [ ] State clearly that there is no telemetry or network communication.
+- [ ] State clearly that there is no telemetry, and that network communication is limited to optional GitHub release update checks.
 
 ## Local Validation
 

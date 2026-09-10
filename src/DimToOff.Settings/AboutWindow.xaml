@@ -87,7 +87,7 @@
             VerticalScrollBarVisibility="Auto"
             VerticalScrollMode="Auto">
             <StackPanel
-                Width="512"
+                MaxWidth="560"
                 Padding="24,22,24,24"
                 Spacing="10"
                 HorizontalAlignment="Left">
@@ -101,7 +101,25 @@
                     <TextBlock
                         Text="Screen blanking for laptops that keeps Windows awake."
                         Style="{StaticResource BodyTextStyle}" />
+                    <TextBlock
+                        x:Name="VersionText"
+                        Style="{StaticResource BodyTextStyle}" />
                 </StackPanel>
+
+                <TextBlock Text="What it does" Style="{StaticResource SectionTitleStyle}" />
+
+                <Border Style="{StaticResource CardStyle}">
+                    <StackPanel Spacing="10">
+                        <TextBlock
+                            Text="The screen goes off, the PC keeps running"
+                            FontSize="17"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <TextBlock
+                            Text="Turn the brightness all the way down, or simply step away, and DimToOff blanks the screen. While it does that, Windows is held back from its own screen timeout and sleep, so downloads, playback and background jobs carry on. Your power plan is never edited: quitting DimToOff hands both settings straight back."
+                            Style="{StaticResource BodyTextStyle}" />
+                    </StackPanel>
+                </Border>
 
                 <TextBlock Text="Display note" Style="{StaticResource SectionTitleStyle}" />
 
@@ -166,7 +184,7 @@
                             <FontIcon Glyph="&#xE946;" FontSize="15" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             <TextBlock
                                 Grid.Column="1"
-                                Text="Input hooks only detect that input happened. DimToOff does not save key content, mouse positions, telemetry, or network data."
+                                Text="Input hooks only detect that input happened. DimToOff does not save key content, mouse positions, telemetry, or input history."
                                 Style="{StaticResource BodyTextStyle}" />
                         </Grid>
                     </StackPanel>
@@ -176,7 +194,7 @@
 
                 <Border Style="{StaticResource CardStyle}">
                     <TextBlock
-                        Text="Settings and logs stay on this PC. DimToOff does not send network requests, collect telemetry, or require administrator privileges."
+                        Text="Settings and logs stay on this PC. If update notifications are enabled, DimToOff checks GitHub Releases for a newer installer. It does not collect telemetry or require administrator privileges."
                         Style="{StaticResource BodyTextStyle}" />
                 </Border>
             </StackPanel>

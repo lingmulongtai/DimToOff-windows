@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Windows.Forms;
 using DimToOff.Models;
+using DimToOff.Native;
 using DimToOff.Services;
 using DimToOff.UI;
 
@@ -9,6 +10,9 @@ namespace DimToOff;
 
 internal sealed class DimToOffApplicationContext : ApplicationContext
 {
+    /// <summary>Slack for poll jitter when comparing input timestamps.</summary>
+    private const int InputDetectionEpsilonMs = 250;
+
     private readonly LogService log;
     private readonly SettingsService settingsService;
     private readonly StartupService startupService;
@@ -17,6 +21,9 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
     private readonly DisplayPowerService displayPowerService;
     private readonly InputHookService inputHookService;
     private readonly BlackoutService blackoutService;
+    private readonly IdleWatchService idleWatchService;
+    private readonly PowerKeepAliveService powerKeepAliveService;
+    private readonly UpdateCheckService updateCheckService;
     private readonly UiCommandService uiCommandService;
     private readonly TrayIconManager trayIconManager;
     private readonly Form messageWindow;
@@ -27,9 +34,18 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
     private Process? settingsProcess;
     private CancellationTokenSource? debounceCts;
     private CancellationTokenSource? brightnessSaveCts;
+    private CancellationTokenSource? updateCheckCts;
+    private CancellationTokenSource? brightnessGuardRestoreCts;
     private AppState state = AppState.Idle;
+    private BlackoutTrigger blackoutTrigger = BlackoutTrigger.Manual;
     private int lastUsableBrightness;
+    private int lastStableBrightness;
+    private int brightnessGuardTarget;
     private DateTimeOffset lastOffTime;
+    private long blackoutLastInputTick;
+    private string idleHoldReason = string.Empty;
+    private DateTimeOffset brightnessGuardArmedUntil = DateTimeOffset.MinValue;
+    private DateTimeOffset suppressBrightnessGuardUntil = DateTimeOffset.MinValue;
     private DateTimeOffset suppressAutoOffUntil = DateTimeOffset.MinValue;
     private bool disposed;
 
@@ -48,22 +64,32 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         displayPowerService = new DisplayPowerService(log);
         inputHookService = new InputHookService(log);
         blackoutService = new BlackoutService(log);
+        idleWatchService = new IdleWatchService(log);
+        powerKeepAliveService = new PowerKeepAliveService(log);
+        updateCheckService = new UpdateCheckService(log);
         uiCommandService = new UiCommandService(log);
         trayIconManager = new TrayIconManager(settings, settingsService);
-        messageWindow = new HiddenMessageWindow();
+        var hiddenMessageWindow = new HiddenMessageWindow(log);
+        hiddenMessageWindow.PowerModeMayHaveChanged += OnPowerModeMayHaveChanged;
+        messageWindow = hiddenMessageWindow;
         _ = messageWindow.Handle;
 
         brightnessService.BrightnessChanged += OnBrightnessChanged;
         inputHookService.UserInputDetected += OnUserInputDetected;
         blackoutService.UserInputDetected += OnUserInputDetected;
+        idleWatchService.Tick += OnIdleTick;
         trayIconManager.SettingsRequested += (_, _) => ShowSettings();
         trayIconManager.TrayMenuRequested += (_, _) => ShowTrayMenu();
+        trayIconManager.BalloonUrlRequested += OnBalloonUrlRequested;
         uiCommandService.CommandReceived += OnUiCommandReceived;
 
         log.Info("DimToOff started");
         InitializeBrightness();
         uiCommandService.Start();
         brightnessService.StartWatching();
+        idleWatchService.Start();
+        UpdateKeepAliveMode();
+        RestartUpdateChecks();
     }
 
     private void InitializeBrightness()
@@ -72,10 +98,17 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         if (current.HasValue && IsComfortableBrightness(current.Value))
         {
             lastUsableBrightness = current.Value;
+            lastStableBrightness = current.Value;
             log.Info($"Initial last usable brightness: {lastUsableBrightness}%");
+        }
+        else if (current.HasValue && IsAboveOffThreshold(current.Value))
+        {
+            lastStableBrightness = current.Value;
+            log.Info($"Initial brightness for power-mode guard: {lastStableBrightness}%");
         }
         else
         {
+            lastStableBrightness = settings.DefaultRestoreBrightness;
             log.Info($"Initial brightness is unavailable or below threshold. Default restore brightness will be used: {lastUsableBrightness}%");
         }
     }
@@ -83,6 +116,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
     private void OnBrightnessChanged(object? sender, int brightness)
     {
         bool restoreBecauseBrightnessReturned = false;
+        int? brightnessGuardRestoreTarget = null;
 
         lock (stateLock)
         {
@@ -91,7 +125,11 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
                 return;
             }
 
-            if (state == AppState.DisplayOffByApp && brightness > settings.OffThreshold)
+            if (TryHandlePowerModeBrightnessChangeLocked(brightness, out int guardTarget))
+            {
+                brightnessGuardRestoreTarget = guardTarget;
+            }
+            else if (state == AppState.DisplayOffByApp && brightness > settings.OffThreshold)
             {
                 state = AppState.RestoringBrightness;
                 restoreBecauseBrightnessReturned = true;
@@ -102,15 +140,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             }
             else if (brightness > settings.OffThreshold)
             {
-                if (IsComfortableBrightness(brightness))
-                {
-                    ScheduleLastUsableBrightnessCommit(brightness);
-                }
-                else
-                {
-                    CancelPendingBrightnessSave();
-                }
-
+                ScheduleStableBrightnessCommit(brightness);
                 CancelPendingDisplayOff();
                 state = AppState.Idle;
                 return;
@@ -118,6 +148,11 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             else if (brightness <= settings.OffThreshold && state == AppState.Idle)
             {
                 CancelPendingBrightnessSave();
+                if (!settings.BrightnessBlackoutEnabled)
+                {
+                    return;
+                }
+
                 if (DateTimeOffset.Now < suppressAutoOffUntil)
                 {
                     log.Info("Auto-off ignored during restore safety window");
@@ -127,6 +162,12 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
                 state = AppState.PendingDisplayOff;
                 StartDebounceTimer();
             }
+        }
+
+        if (brightnessGuardRestoreTarget.HasValue)
+        {
+            QueueToUiThread(async () => await RestoreBrightnessForPowerModeGuardAsync(brightnessGuardRestoreTarget.Value));
+            return;
         }
 
         if (restoreBecauseBrightnessReturned)
@@ -348,7 +389,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         switch (name)
         {
             case "blank":
-                TurnDisplayOffByApp();
+                TurnDisplayOffByApp(BlackoutTrigger.Manual);
                 break;
             case "restore":
                 _ = RestoreBrightnessAfterWakeAsync();
@@ -358,6 +399,9 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
                 break;
             case "reload-settings":
                 ReloadSettingsFromDisk();
+                break;
+            case "check-updates":
+                _ = CheckForUpdatesAsync(manual: true);
                 break;
             case "set-enabled" when bool.TryParse(value, out bool enabled):
                 settings.Enabled = enabled;
@@ -394,7 +438,12 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
 
     private void ApplySettings(AppSettings updated)
     {
+        bool updateSettingsChanged =
+            settings.CheckForUpdates != updated.CheckForUpdates ||
+            settings.UpdateCheckIntervalHours != updated.UpdateCheckIntervalHours;
+
         settings.Enabled = updated.Enabled;
+        settings.BrightnessBlackoutEnabled = updated.BrightnessBlackoutEnabled;
         settings.OffThreshold = updated.OffThreshold;
         settings.DebounceMs = updated.DebounceMs;
         settings.CooldownMs = updated.CooldownMs;
@@ -407,13 +456,284 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         settings.DefaultRestoreBrightness = updated.DefaultRestoreBrightness;
         settings.StartWithWindows = updated.StartWithWindows;
         settings.ShowErrorNotifications = updated.ShowErrorNotifications;
-        settings.DisableWhileFullscreen = updated.DisableWhileFullscreen;
-        settings.DisableWhenExternalMonitorConnected = updated.DisableWhenExternalMonitorConnected;
+        settings.CheckForUpdates = updated.CheckForUpdates;
+        settings.UpdateCheckIntervalHours = updated.UpdateCheckIntervalHours;
+        settings.LastUpdateCheckUtc = updated.LastUpdateCheckUtc;
+        settings.LastNotifiedUpdateVersion = updated.LastNotifiedUpdateVersion;
+        settings.PreserveBrightnessOnPowerModeChange = updated.PreserveBrightnessOnPowerModeChange;
+        settings.BrightnessGuardWindowMs = updated.BrightnessGuardWindowMs;
+        settings.BrightnessGuardTolerancePercent = updated.BrightnessGuardTolerancePercent;
+        settings.IdleBlackoutEnabled = updated.IdleBlackoutEnabled;
+        settings.IdleTimeoutPluggedInSeconds = updated.IdleTimeoutPluggedInSeconds;
+        settings.IdleTimeoutOnBatterySeconds = updated.IdleTimeoutOnBatterySeconds;
+        settings.IdleRespectAppDisplayRequests = updated.IdleRespectAppDisplayRequests;
+        settings.IdleSkipWhileFullscreenApp = updated.IdleSkipWhileFullscreenApp;
+        settings.IdleSkipWhenExternalMonitorConnected = updated.IdleSkipWhenExternalMonitorConnected;
+
+        if (updateSettingsChanged)
+        {
+            RestartUpdateChecks();
+        }
+
+        UpdateKeepAliveMode();
     }
 
     private void ShowAbout()
     {
         LaunchWinUiSurface("--about", reloadSettingsOnExit: false);
+    }
+
+    private void OnPowerModeMayHaveChanged(object? sender, EventArgs e)
+    {
+        UpdateKeepAliveMode();
+        trayIconManager.RefreshSettings();
+
+        if (!settings.Enabled || !settings.PreserveBrightnessOnPowerModeChange)
+        {
+            return;
+        }
+
+        int? current = brightnessService.GetCurrentBrightness();
+        int target = IsAboveOffThreshold(lastStableBrightness)
+            ? lastStableBrightness
+            : current ?? settings.DefaultRestoreBrightness;
+        int? restoreTarget = null;
+
+        if (!IsAboveOffThreshold(target))
+        {
+            log.Info("Brightness guard was not armed because no usable brightness is known");
+            return;
+        }
+
+        lock (stateLock)
+        {
+            if (state is AppState.DisplayOffByApp or AppState.RestoringBrightness)
+            {
+                return;
+            }
+
+            brightnessGuardTarget = Math.Clamp(target, 0, 100);
+            brightnessGuardArmedUntil = DateTimeOffset.Now.AddMilliseconds(settings.BrightnessGuardWindowMs);
+
+            if (current.HasValue && TryHandlePowerModeBrightnessChangeLocked(current.Value, out int guardTarget))
+            {
+                restoreTarget = guardTarget;
+            }
+        }
+
+        string currentText = current.HasValue ? $"{current.Value}%" : "unknown";
+        log.Info($"Brightness guard armed after power mode change. Target={target}%, current={currentText}");
+
+        if (restoreTarget.HasValue)
+        {
+            QueueToUiThread(async () => await RestoreBrightnessForPowerModeGuardAsync(restoreTarget.Value));
+        }
+    }
+
+    private void OnBalloonUrlRequested(object? sender, string url)
+    {
+        OpenUrl(url);
+    }
+
+    private void RestartUpdateChecks()
+    {
+        updateCheckCts?.Cancel();
+        updateCheckCts?.Dispose();
+        updateCheckCts = null;
+
+        if (!settings.CheckForUpdates)
+        {
+            return;
+        }
+
+        updateCheckCts = new CancellationTokenSource();
+        CancellationToken token = updateCheckCts.Token;
+        _ = Task.Run(async () => await UpdateCheckLoopAsync(token), token);
+    }
+
+    private async Task UpdateCheckLoopAsync(CancellationToken token)
+    {
+        try
+        {
+            while (!token.IsCancellationRequested)
+            {
+                await Task.Delay(GetDelayUntilNextUpdateCheck(), token);
+
+                if (ShouldCheckForUpdates())
+                {
+                    await CheckForUpdatesAsync(manual: false, token);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            log.Error("Update check loop failed", ex);
+        }
+    }
+
+    private bool ShouldCheckForUpdates()
+    {
+        if (!settings.CheckForUpdates)
+        {
+            return false;
+        }
+
+        if (!settings.LastUpdateCheckUtc.HasValue)
+        {
+            return true;
+        }
+
+        int intervalHours = Math.Clamp(settings.UpdateCheckIntervalHours, 1, 168);
+        return DateTimeOffset.UtcNow - settings.LastUpdateCheckUtc.Value >= TimeSpan.FromHours(intervalHours);
+    }
+
+    private TimeSpan GetDelayUntilNextUpdateCheck()
+    {
+        if (!settings.LastUpdateCheckUtc.HasValue)
+        {
+            return TimeSpan.FromSeconds(10);
+        }
+
+        int intervalHours = Math.Clamp(settings.UpdateCheckIntervalHours, 1, 168);
+        DateTimeOffset nextCheck = settings.LastUpdateCheckUtc.Value.AddHours(intervalHours);
+        TimeSpan delay = nextCheck - DateTimeOffset.UtcNow;
+        return delay <= TimeSpan.Zero ? TimeSpan.FromSeconds(10) : delay;
+    }
+
+    private async Task CheckForUpdatesAsync(bool manual, CancellationToken cancellationToken = default)
+    {
+        if (!manual && !settings.CheckForUpdates)
+        {
+            return;
+        }
+
+        UpdateCheckResult result = await updateCheckService.CheckAsync(cancellationToken);
+        settings.LastUpdateCheckUtc = DateTimeOffset.UtcNow;
+
+        if (result.Status == UpdateCheckStatus.UpdateAvailable && result.Update is not null)
+        {
+            bool alreadyNotified = string.Equals(
+                settings.LastNotifiedUpdateVersion,
+                result.Update.TagName,
+                StringComparison.OrdinalIgnoreCase);
+
+            if (manual || !alreadyNotified)
+            {
+                QueueToUiThread(() => trayIconManager.ShowUpdateAvailable(result.Update));
+                settings.LastNotifiedUpdateVersion = result.Update.TagName;
+                log.Info($"Update available: {result.Update.TagName} ({result.Update.ReleaseUrl})");
+            }
+        }
+        else if (manual && result.Status == UpdateCheckStatus.NoUpdate)
+        {
+            QueueToUiThread(() => trayIconManager.ShowInformation(
+                "DimToOff is up to date",
+                $"Current version: {UpdateCheckService.GetCurrentVersionText()}"));
+            log.Info($"Update check completed: current version {UpdateCheckService.GetCurrentVersionText()} is up to date");
+        }
+        else if (manual && result.Status == UpdateCheckStatus.Failed)
+        {
+            QueueToUiThread(() => trayIconManager.ShowError(
+                "DimToOff update check failed",
+                result.ErrorMessage ?? "Could not check GitHub Releases.",
+                force: true));
+        }
+
+        settingsService.Save(settings);
+        trayIconManager.RefreshSettings();
+    }
+
+    private static void OpenUrl(string url)
+    {
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = url,
+            UseShellExecute = true
+        });
+    }
+
+    private bool TryHandlePowerModeBrightnessChangeLocked(int brightness, out int target)
+    {
+        target = 0;
+
+        if (!settings.PreserveBrightnessOnPowerModeChange ||
+            DateTimeOffset.Now > brightnessGuardArmedUntil ||
+            DateTimeOffset.Now < suppressBrightnessGuardUntil ||
+            state is AppState.DisplayOffByApp or AppState.RestoringBrightness)
+        {
+            return false;
+        }
+
+        int candidate = brightnessGuardTarget;
+        if (!IsAboveOffThreshold(candidate))
+        {
+            return false;
+        }
+
+        int tolerance = Math.Clamp(settings.BrightnessGuardTolerancePercent, 1, 20);
+        if (Math.Abs(brightness - candidate) < tolerance)
+        {
+            return false;
+        }
+
+        target = candidate;
+        state = AppState.Cooldown;
+        brightnessGuardArmedUntil = DateTimeOffset.MinValue;
+        suppressBrightnessGuardUntil = DateTimeOffset.Now.AddSeconds(5);
+        suppressAutoOffUntil = DateTimeOffset.Now.AddSeconds(5);
+        CancelPendingDisplayOff();
+        CancelPendingBrightnessSave();
+        log.Info($"Brightness guard restoring {brightness}% back to {target}% after power mode change");
+        return true;
+    }
+
+    private async Task RestoreBrightnessForPowerModeGuardAsync(int target)
+    {
+        CancelPendingBrightnessGuardRestore();
+        var restoreCts = new CancellationTokenSource();
+        brightnessGuardRestoreCts = restoreCts;
+        CancellationToken token = restoreCts.Token;
+
+        try
+        {
+            await Task.Delay(350, token);
+            await Task.Run(() => brightnessService.SetBrightness(target), token);
+            lastStableBrightness = target;
+            if (IsComfortableBrightness(target))
+            {
+                lastUsableBrightness = target;
+            }
+
+            await Task.Delay(settings.CooldownMs, token);
+
+            lock (stateLock)
+            {
+                state = AppState.Idle;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            log.Error("Failed to restore brightness after power mode change", ex);
+
+            lock (stateLock)
+            {
+                state = AppState.Idle;
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(brightnessGuardRestoreCts, restoreCts))
+            {
+                brightnessGuardRestoreCts = null;
+                restoreCts.Dispose();
+            }
+        }
     }
 
     private void StartDebounceTimer()
@@ -435,7 +755,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
                 int? current = brightnessService.GetCurrentBrightness();
                 if (current.HasValue && current.Value <= settings.OffThreshold)
                 {
-                    PostToUiThread(() => TurnDisplayOffByApp(force: false));
+                    PostToUiThread(() => TurnDisplayOffByApp(BlackoutTrigger.Brightness));
                     return;
                 }
 
@@ -458,7 +778,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         });
     }
 
-    private void TurnDisplayOffByApp(bool force = true)
+    private void TurnDisplayOffByApp(BlackoutTrigger trigger)
     {
         lock (stateLock)
         {
@@ -474,12 +794,18 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             }
 
             state = AppState.DisplayOffByApp;
+            blackoutTrigger = trigger;
             lastOffTime = DateTimeOffset.Now;
         }
 
+        log.Info($"Blanking the screen ({trigger})");
+
         CancelPendingDisplayOff();
         CancelPendingBrightnessSave();
-        displayPowerService.PreventSystemSleepWhileDisplayIsBlanked();
+        blackoutLastInputTick = GetLastInputTick();
+        idleHoldReason = string.Empty;
+        idleWatchService.SetWakeWatchEnabled(true);
+        UpdateKeepAliveMode();
 
         if (UseBlackoutMode())
         {
@@ -491,6 +817,151 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             displayPowerService.TurnOffDisplay();
         }
     }
+
+    /// <summary>
+    /// Runs once a second. While the idle takeover is on, Windows never reaches its own
+    /// display-off or sleep timeout, so this is what blanks the screen instead, and what
+    /// notices the user coming back.
+    /// </summary>
+    private void OnIdleTick(object? sender, TimeSpan idleTime)
+    {
+        AppState currentState;
+        DateTimeOffset suppressUntil;
+        lock (stateLock)
+        {
+            currentState = state;
+            suppressUntil = suppressAutoOffUntil;
+        }
+
+        if (currentState == AppState.DisplayOffByApp)
+        {
+            if (HasUserInputSinceBlackout(idleTime))
+            {
+                OnUserInputDetected(this, EventArgs.Empty);
+            }
+
+            return;
+        }
+
+        UpdateKeepAliveMode();
+
+        if (currentState != AppState.Idle || !IsIdleTakeoverActive())
+        {
+            return;
+        }
+
+        int timeoutSeconds = GetIdleTimeoutSeconds();
+        if (idleTime.TotalSeconds < timeoutSeconds || DateTimeOffset.Now < suppressUntil)
+        {
+            return;
+        }
+
+        if (TryGetIdleHoldReason(out string reason))
+        {
+            if (!string.Equals(idleHoldReason, reason, StringComparison.Ordinal))
+            {
+                idleHoldReason = reason;
+                log.Info($"Idle blackout postponed because {reason}");
+            }
+
+            return;
+        }
+
+        idleHoldReason = string.Empty;
+        log.Info($"Idle timeout of {timeoutSeconds}s reached");
+        TurnDisplayOffByApp(BlackoutTrigger.Idle);
+    }
+
+    /// <summary>
+    /// True once the user has produced real input after the screen was blanked. Comparing
+    /// input timestamps keeps synthesized mouse traffic from waking the screen by itself.
+    /// </summary>
+    private bool HasUserInputSinceBlackout(TimeSpan idleTime)
+    {
+        if ((DateTimeOffset.Now - lastOffTime).TotalMilliseconds < settings.IgnoreInputMs)
+        {
+            return false;
+        }
+
+        long lastInputTick = Environment.TickCount64 - (long)idleTime.TotalMilliseconds;
+        return lastInputTick - blackoutLastInputTick > InputDetectionEpsilonMs;
+    }
+
+    private static long GetLastInputTick() =>
+        Environment.TickCount64 - (long)IdleWatchService.GetIdleTime().TotalMilliseconds;
+
+    /// <summary>
+    /// Decides how much of the Windows idle policy DimToOff currently overrides.
+    /// Nothing is held continuously, so quitting the app hands the policy straight back.
+    /// </summary>
+    private void UpdateKeepAliveMode()
+    {
+        AppState currentState;
+        lock (stateLock)
+        {
+            currentState = state;
+        }
+
+        KeepAliveMode mode;
+        if (currentState == AppState.DisplayOffByApp)
+        {
+            // The overlay is what the user sees as "screen off", so the panel stays powered.
+            mode = UseBlackoutMode() ? KeepAliveMode.DisplayAndSystem : KeepAliveMode.SystemOnly;
+        }
+        else
+        {
+            mode = IsIdleTakeoverActive() ? KeepAliveMode.DisplayAndSystem : KeepAliveMode.Off;
+        }
+
+        powerKeepAliveService.SetMode(mode);
+    }
+
+    private bool IsIdleTakeoverActive()
+    {
+        if (!settings.Enabled || !settings.IdleBlackoutEnabled || GetIdleTimeoutSeconds() <= 0)
+        {
+            return false;
+        }
+
+        return !settings.IdleSkipWhenExternalMonitorConnected || !IsExternalMonitorConnected();
+    }
+
+    private int GetIdleTimeoutSeconds() =>
+        SystemInformation.PowerStatus.PowerLineStatus == PowerLineStatus.Offline
+            ? settings.IdleTimeoutOnBatterySeconds
+            : settings.IdleTimeoutPluggedInSeconds;
+
+    private bool TryGetIdleHoldReason(out string reason)
+    {
+        if (settings.IdleSkipWhileFullscreenApp && IsFullscreenAppActive())
+        {
+            reason = "a fullscreen app is in the foreground";
+            return true;
+        }
+
+        if (settings.IdleRespectAppDisplayRequests && powerKeepAliveService.IsDisplayRequestedByAnotherApp())
+        {
+            reason = "another app is keeping the display on";
+            return true;
+        }
+
+        reason = string.Empty;
+        return false;
+    }
+
+    private static bool IsFullscreenAppActive()
+    {
+        if (Shell32.SHQueryUserNotificationState(out Shell32.UserNotificationState state) != 0)
+        {
+            return false;
+        }
+
+        return state is Shell32.UserNotificationState.Busy
+            or Shell32.UserNotificationState.RunningDirect3DFullScreen
+            or Shell32.UserNotificationState.PresentationMode;
+    }
+
+    private static bool IsExternalMonitorConnected() => Screen.AllScreens.Length > 1;
 
     private void OnUserInputDetected(object? sender, EventArgs e)
     {
@@ -536,15 +1007,22 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
                 await Task.Delay(700);
             }
 
-            int target = CalculateRestoreBrightness();
-            await Task.Run(() => brightnessService.SetBrightness(target));
-            displayPowerService.AllowNormalSleepPolicy();
+            // Idle and manual blanking never touched the panel brightness, so waking must not either.
+            if (blackoutTrigger == BlackoutTrigger.Brightness)
+            {
+                int target = CalculateRestoreBrightness();
+                await Task.Run(() => brightnessService.SetBrightness(target));
+            }
+
+            idleWatchService.SetWakeWatchEnabled(false);
 
             lock (stateLock)
             {
                 state = AppState.Cooldown;
                 suppressAutoOffUntil = DateTimeOffset.Now.AddSeconds(5);
             }
+
+            UpdateKeepAliveMode();
 
             await Task.Delay(settings.CooldownMs);
 
@@ -557,7 +1035,8 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         {
             log.Error("Failed to restore brightness", ex);
             blackoutService.Hide();
-            displayPowerService.AllowNormalSleepPolicy();
+            idleWatchService.SetWakeWatchEnabled(false);
+            UpdateKeepAliveMode();
             trayIconManager.ShowError("DimToOff", "Failed to restore brightness. See the log for details.");
 
             lock (stateLock)
@@ -578,13 +1057,15 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             }
 
             blackoutService.Hide();
-            displayPowerService.AllowNormalSleepPolicy();
+            idleWatchService.SetWakeWatchEnabled(false);
 
             lock (stateLock)
             {
                 state = AppState.Cooldown;
                 suppressAutoOffUntil = DateTimeOffset.Now.AddSeconds(2);
             }
+
+            UpdateKeepAliveMode();
 
             await Task.Delay(settings.CooldownMs);
 
@@ -597,7 +1078,8 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         {
             log.Error("Failed to hide blackout after brightness returned", ex);
             blackoutService.Hide();
-            displayPowerService.AllowNormalSleepPolicy();
+            idleWatchService.SetWakeWatchEnabled(false);
+            UpdateKeepAliveMode();
 
             lock (stateLock)
             {
@@ -627,6 +1109,9 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
     private bool IsComfortableBrightness(int brightness) =>
         brightness >= Math.Max(settings.OffThreshold + 1, settings.MinimumRestoreBrightness);
 
+    private bool IsAboveOffThreshold(int brightness) =>
+        brightness > settings.OffThreshold;
+
     private bool UseBlackoutMode() =>
         string.Equals(settings.DisplayOffMode, "Blackout", StringComparison.OrdinalIgnoreCase);
 
@@ -637,7 +1122,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         debounceCts = null;
     }
 
-    private void ScheduleLastUsableBrightnessCommit(int brightness)
+    private void ScheduleStableBrightnessCommit(int brightness)
     {
         CancelPendingBrightnessSave();
         brightnessSaveCts = new CancellationTokenSource();
@@ -654,7 +1139,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
                 }
 
                 int? current = brightnessService.GetCurrentBrightness();
-                if (!current.HasValue || current.Value != brightness || !IsComfortableBrightness(current.Value))
+                if (!current.HasValue || current.Value != brightness || !IsAboveOffThreshold(current.Value))
                 {
                     return;
                 }
@@ -663,8 +1148,16 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
                 {
                     if (state == AppState.Idle)
                     {
-                        lastUsableBrightness = brightness;
-                        log.Info($"Last usable brightness committed after stable delay: {lastUsableBrightness}%");
+                        lastStableBrightness = brightness;
+                        if (IsComfortableBrightness(brightness))
+                        {
+                            lastUsableBrightness = brightness;
+                            log.Info($"Last usable brightness committed after stable delay: {lastUsableBrightness}%");
+                        }
+                        else
+                        {
+                            log.Info($"Last stable brightness committed for power-mode guard: {lastStableBrightness}%");
+                        }
                     }
                 }
             }
@@ -683,6 +1176,13 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
         brightnessSaveCts?.Cancel();
         brightnessSaveCts?.Dispose();
         brightnessSaveCts = null;
+    }
+
+    private void CancelPendingBrightnessGuardRestore()
+    {
+        brightnessGuardRestoreCts?.Cancel();
+        brightnessGuardRestoreCts?.Dispose();
+        brightnessGuardRestoreCts = null;
     }
 
     private void PostToUiThread(Action action)
@@ -747,14 +1247,26 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             log.Info("DimToOff stopping");
             CancelPendingDisplayOff();
             CancelPendingBrightnessSave();
+            CancelPendingBrightnessGuardRestore();
+            updateCheckCts?.Cancel();
+            updateCheckCts?.Dispose();
+            updateCheckCts = null;
             CloseWinUiSurfaces();
             brightnessService.BrightnessChanged -= OnBrightnessChanged;
             inputHookService.UserInputDetected -= OnUserInputDetected;
             blackoutService.UserInputDetected -= OnUserInputDetected;
+            idleWatchService.Tick -= OnIdleTick;
+            trayIconManager.BalloonUrlRequested -= OnBalloonUrlRequested;
             uiCommandService.CommandReceived -= OnUiCommandReceived;
+            if (messageWindow is HiddenMessageWindow hiddenMessageWindow)
+            {
+                hiddenMessageWindow.PowerModeMayHaveChanged -= OnPowerModeMayHaveChanged;
+            }
             uiCommandService.Dispose();
+            updateCheckService.Dispose();
             blackoutService.Dispose();
-            displayPowerService.AllowNormalSleepPolicy();
+            idleWatchService.Dispose();
+            powerKeepAliveService.Dispose();
             brightnessService.Dispose();
             inputHookService.Dispose();
             trayIconManager.Dispose();
@@ -767,17 +1279,164 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
 
     private sealed class HiddenMessageWindow : Form
     {
-        public HiddenMessageWindow()
+        private static readonly Guid[] PowerSettingGuids =
+        [
+            new("5D3E9A59-E9D5-4B00-A6BD-FF34FF516548"), // AC/DC power source
+            new("245D8541-3943-4422-B025-13A784F679B7"), // active power scheme personality
+            new("E00958C0-C213-4ACE-AC77-FECCED2EEEA5")  // battery saver / power saving status
+        ];
+
+        private readonly LogService log;
+        private readonly List<nint> powerNotificationHandles = [];
+        private PowrProf.EffectivePowerModeCallback? effectivePowerModeCallback;
+        private nint effectivePowerModeNotificationHandle;
+        private int? lastEffectivePowerMode;
+
+        public event EventHandler? PowerModeMayHaveChanged;
+
+        public HiddenMessageWindow(LogService log)
         {
+            this.log = log;
             ShowInTaskbar = false;
             FormBorderStyle = FormBorderStyle.FixedToolWindow;
             StartPosition = FormStartPosition.Manual;
             Size = new Size(1, 1);
         }
 
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            RegisterPowerNotifications();
+        }
+
+        protected override void OnHandleDestroyed(EventArgs e)
+        {
+            UnregisterPowerNotifications();
+            base.OnHandleDestroyed(e);
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == NativeConstants.WM_POWERBROADCAST &&
+                (m.WParam.ToInt32() == NativeConstants.PBT_POWERSETTINGCHANGE ||
+                 m.WParam.ToInt32() == NativeConstants.PBT_APMPOWERSTATUSCHANGE ||
+                 m.WParam.ToInt32() == NativeConstants.PBT_APMRESUMEAUTOMATIC))
+            {
+                RaisePowerModeMayHaveChanged();
+            }
+
+            base.WndProc(ref m);
+        }
+
         protected override void SetVisibleCore(bool value)
         {
             base.SetVisibleCore(false);
+        }
+
+        private void RegisterPowerNotifications()
+        {
+            foreach (Guid powerSettingGuid in PowerSettingGuids)
+            {
+                Guid guid = powerSettingGuid;
+                nint handle = User32.RegisterPowerSettingNotification(
+                    Handle,
+                    ref guid,
+                    NativeConstants.DEVICE_NOTIFY_WINDOW_HANDLE);
+
+                if (handle == 0)
+                {
+                    log.Error($"Failed to register power setting notification: {powerSettingGuid}");
+                    continue;
+                }
+
+                powerNotificationHandles.Add(handle);
+            }
+
+            RegisterEffectivePowerModeNotification();
+        }
+
+        private void UnregisterPowerNotifications()
+        {
+            UnregisterEffectivePowerModeNotification();
+
+            foreach (nint handle in powerNotificationHandles)
+            {
+                User32.UnregisterPowerSettingNotification(handle);
+            }
+
+            powerNotificationHandles.Clear();
+        }
+
+        private void RegisterEffectivePowerModeNotification()
+        {
+            effectivePowerModeCallback = OnEffectivePowerModeChanged;
+
+            try
+            {
+                int result = PowrProf.PowerRegisterForEffectivePowerModeNotifications(
+                    NativeConstants.EFFECTIVE_POWER_MODE_V2,
+                    effectivePowerModeCallback,
+                    0,
+                    out effectivePowerModeNotificationHandle);
+
+                if (result != 0)
+                {
+                    effectivePowerModeNotificationHandle = 0;
+                    effectivePowerModeCallback = null;
+                    log.Info($"Effective power mode notifications unavailable. Win32 error={result}");
+                }
+            }
+            catch (EntryPointNotFoundException)
+            {
+                effectivePowerModeCallback = null;
+                log.Info("Effective power mode notifications are unavailable on this Windows version");
+            }
+            catch (DllNotFoundException ex)
+            {
+                effectivePowerModeCallback = null;
+                log.Error("Effective power mode notifications could not be registered", ex);
+            }
+        }
+
+        private void UnregisterEffectivePowerModeNotification()
+        {
+            if (effectivePowerModeNotificationHandle != 0)
+            {
+                PowrProf.PowerUnregisterFromEffectivePowerModeNotifications(effectivePowerModeNotificationHandle);
+                effectivePowerModeNotificationHandle = 0;
+            }
+
+            effectivePowerModeCallback = null;
+            lastEffectivePowerMode = null;
+        }
+
+        private void OnEffectivePowerModeChanged(int mode, nint context)
+        {
+            int? previous = lastEffectivePowerMode;
+            lastEffectivePowerMode = mode;
+
+            if (!previous.HasValue || previous.Value == mode)
+            {
+                return;
+            }
+
+            RaisePowerModeMayHaveChanged();
+        }
+
+        private void RaisePowerModeMayHaveChanged()
+        {
+            if (!IsHandleCreated)
+            {
+                return;
+            }
+
+            try
+            {
+                BeginInvoke((MethodInvoker)(() => PowerModeMayHaveChanged?.Invoke(this, EventArgs.Empty)));
+            }
+            catch (InvalidOperationException)
+            {
+            }
         }
     }
 }
