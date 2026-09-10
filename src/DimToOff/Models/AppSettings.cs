@@ -3,6 +3,7 @@ namespace DimToOff.Models;
 internal sealed class AppSettings
 {
     public bool Enabled { get; set; } = true;
+    public bool BrightnessBlackoutEnabled { get; set; } = true;
     public int OffThreshold { get; set; } = 1;
     public int DebounceMs { get; set; } = 800;
     public int CooldownMs { get; set; } = 1500;

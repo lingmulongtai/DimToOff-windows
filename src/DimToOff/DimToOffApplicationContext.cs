@@ -148,6 +148,11 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             else if (brightness <= settings.OffThreshold && state == AppState.Idle)
             {
                 CancelPendingBrightnessSave();
+                if (!settings.BrightnessBlackoutEnabled)
+                {
+                    return;
+                }
+
                 if (DateTimeOffset.Now < suppressAutoOffUntil)
                 {
                     log.Info("Auto-off ignored during restore safety window");
@@ -438,6 +443,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
             settings.UpdateCheckIntervalHours != updated.UpdateCheckIntervalHours;
 
         settings.Enabled = updated.Enabled;
+        settings.BrightnessBlackoutEnabled = updated.BrightnessBlackoutEnabled;
         settings.OffThreshold = updated.OffThreshold;
         settings.DebounceMs = updated.DebounceMs;
         settings.CooldownMs = updated.CooldownMs;
