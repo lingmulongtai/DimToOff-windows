@@ -4,6 +4,7 @@ using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using WinRT.Interop;
 
 namespace DimToOff.Settings;
@@ -11,7 +12,14 @@ namespace DimToOff.Settings;
 public sealed partial class TrayMenuWindow : Window
 {
     private const int MenuWidth = 300;
-    private const int MenuHeight = 428;
+    private const int MenuHeight = 476;
+
+    /// <summary>
+    /// Idle timeouts the quick menu offers. A shorter list than the settings window, because
+    /// the point here is one click from the taskbar rather than every value there is.
+    /// </summary>
+    private static readonly int[] TimeoutChoices =
+        [0, 60, 120, 300, 600, 900, 1800, 3600];
 
     private readonly TrayCommandClient commandClient;
     private readonly SettingsStore settingsStore = new();
@@ -27,6 +35,7 @@ public sealed partial class TrayMenuWindow : Window
         commandClient = new TrayCommandClient(options.PipeName);
         mainExecutablePath = options.MainExecutablePath;
         ConfigureWindow();
+        BuildTimeoutChoices();
         ApplyCurrentState();
     }
 
@@ -56,6 +65,95 @@ public sealed partial class TrayMenuWindow : Window
         settings = settingsStore.Load();
         settings.StartWithWindows = StartupRegistration.IsEnabled();
         UpdateCheckMarks();
+    }
+
+    private void BuildTimeoutChoices()
+    {
+        foreach (int seconds in TimeoutChoices)
+        {
+            TimeoutChoiceList.Children.Add(CreateTimeoutChoice(seconds));
+        }
+    }
+
+    /// <summary>One row of the timeout page: a check mark when it is the value in use.</summary>
+    private Button CreateTimeoutChoice(int seconds)
+    {
+        var check = new FontIcon
+        {
+            Glyph = "",
+            FontSize = 13,
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            Visibility = Visibility.Collapsed
+        };
+
+        var label = new TextBlock
+        {
+            Text = seconds <= 0 ? "Never" : FormatDuration(seconds),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        Grid.SetColumn(label, 1);
+
+        var layout = new Grid { ColumnSpacing = 10 };
+        layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
+        layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        layout.Children.Add(check);
+        layout.Children.Add(label);
+
+        var button = new Button
+        {
+            Style = (Style)MenuRoot.Resources["MenuButtonStyle"],
+            Content = layout,
+            Tag = seconds
+        };
+        button.Click += TimeoutChoice_Click;
+        return button;
+    }
+
+    private void TimeoutButton_Click(object sender, RoutedEventArgs e)
+    {
+        MainPage.Visibility = Visibility.Collapsed;
+        TimeoutPage.Visibility = Visibility.Visible;
+    }
+
+    private void TimeoutBackButton_Click(object sender, RoutedEventArgs e)
+    {
+        TimeoutPage.Visibility = Visibility.Collapsed;
+        MainPage.Visibility = Visibility.Visible;
+    }
+
+    private async void TimeoutChoice_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: int seconds })
+        {
+            return;
+        }
+
+        SetCurrentTimeout(seconds);
+        settingsStore.Save(settings);
+        UpdateCheckMarks();
+        TimeoutBackButton_Click(sender, e);
+        await commandClient.SendAsync("reload-settings");
+    }
+
+    /// <summary>
+    /// The quick menu edits the timeout for the power source in use right now. The other one
+    /// stays where the settings window left it.
+    /// </summary>
+    private int GetCurrentTimeout() =>
+        PowerSource.IsOnBattery()
+            ? settings.IdleTimeoutOnBatterySeconds
+            : settings.IdleTimeoutPluggedInSeconds;
+
+    private void SetCurrentTimeout(int seconds)
+    {
+        if (PowerSource.IsOnBattery())
+        {
+            settings.IdleTimeoutOnBatterySeconds = seconds;
+            return;
+        }
+
+        settings.IdleTimeoutPluggedInSeconds = seconds;
     }
 
     private async void IdleBlackoutButton_Click(object sender, RoutedEventArgs e)
@@ -139,6 +237,26 @@ public sealed partial class TrayMenuWindow : Window
         IdleBlackoutCheck.Visibility = settings.IdleBlackoutEnabled ? Visibility.Visible : Visibility.Collapsed;
         StartWithWindowsCheck.Visibility = settings.StartWithWindows ? Visibility.Visible : Visibility.Collapsed;
         StatusText.Text = BuildStatusText();
+        UpdateTimeoutRow();
+    }
+
+    private void UpdateTimeoutRow()
+    {
+        int current = GetCurrentTimeout();
+        bool onBattery = PowerSource.IsOnBattery();
+
+        TimeoutButton.IsEnabled = settings.Enabled && settings.IdleBlackoutEnabled;
+        TimeoutValueText.Text = current <= 0 ? "Never" : FormatDuration(current);
+        TimeoutPageSubtitle.Text = onBattery ? "On battery" : "Plugged in";
+
+        foreach (Button choice in TimeoutChoiceList.Children.OfType<Button>())
+        {
+            if (choice is { Tag: int seconds, Content: Grid layout } &&
+                layout.Children.FirstOrDefault() is FontIcon check)
+            {
+                check.Visibility = seconds == current ? Visibility.Visible : Visibility.Collapsed;
+            }
+        }
     }
 
     private string BuildStatusText()
