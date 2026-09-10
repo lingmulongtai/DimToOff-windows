@@ -6,14 +6,15 @@ using DimToOff.Native;
 namespace DimToOff.Services;
 
 /// <summary>
-/// Keeps screen savers off the screen while DimToOff owns it.
+/// Keeps screen savers off the screen while DimToOff owns it, in two independent halves.
 ///
-/// The Windows screen saver is asked to stand down, and a sweep watches for anything that
-/// still puts a full-screen window in front of ours. That second half is what catches the
-/// burn-in savers OEMs ship with OLED laptops, such as ASUS OLED Care: they are ordinary
-/// always-on-top windows rather than real screen savers, so no Windows setting stops them.
-/// Lighting the panel up to scroll a picture across it is exactly what a blacked-out screen
-/// is trying to avoid, and it defeats the point of the blackout.
+/// While the guard is active the Windows screen saver is not allowed to start. While the
+/// black overlay is also up, a sweep watches for anything that still puts a full-screen
+/// window in front of it. That second half is what catches the burn-in savers OEMs ship with
+/// OLED laptops, such as ASUS OLED Care: they are ordinary always-on-top windows rather than
+/// real screen savers, so no Windows setting stops them. Lighting the panel up to scroll a
+/// picture across it is exactly what a blacked-out screen is trying to avoid, and it leaves
+/// the blackout with nothing to show for itself.
 ///
 /// Everything this changes is put back the moment the guard stands down, so quitting
 /// DimToOff hands the OEM behavior straight back.
@@ -91,6 +92,7 @@ internal sealed class ScreenSaverGuardService : IDisposable
         }
     }
 
+    /// <summary>Turns the guard on, which keeps the Windows screen saver from starting.</summary>
     public void SetActive(bool value)
     {
         if (disposed || active == value)
@@ -102,25 +104,45 @@ internal sealed class ScreenSaverGuardService : IDisposable
 
         if (value)
         {
-            lastReportedIntruder = string.Empty;
             if (suspendsWindowsScreenSaver)
             {
                 SuspendWindowsScreenSaver();
             }
 
-            sweepTimer.Start();
             log.Info("Screen saver guard on");
             return;
         }
 
-        sweepTimer.Stop();
+        SetWatchingBlackout(false);
         ResumeWindowsScreenSaver();
         log.Info("Screen saver guard off");
     }
 
+    /// <summary>
+    /// Starts and stops the sweep that watches for something taking the screen. It only makes
+    /// sense while the black overlay is up, since that is the only time there is a screen to
+    /// take back; with the panel powered off there is no window of ours to put back in front.
+    /// </summary>
+    public void SetWatchingBlackout(bool value)
+    {
+        if (disposed || sweepTimer.Enabled == value)
+        {
+            return;
+        }
+
+        if (value)
+        {
+            lastReportedIntruder = string.Empty;
+            sweepTimer.Start();
+            return;
+        }
+
+        sweepTimer.Stop();
+    }
+
     private void OnSweepTick(object? sender, EventArgs e)
     {
-        if (!active)
+        if (!active || disposed)
         {
             return;
         }
