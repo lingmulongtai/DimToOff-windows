@@ -480,6 +480,7 @@ internal sealed class DimToOffApplicationContext : ApplicationContext
     private void OnPowerModeMayHaveChanged(object? sender, EventArgs e)
     {
         UpdateKeepAliveMode();
+        trayIconManager.RefreshSettings();
 
         if (!settings.Enabled || !settings.PreserveBrightnessOnPowerModeChange)
         {
