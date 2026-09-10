@@ -43,6 +43,14 @@ panel straight back up.
 - `DimToOff-v0.6.0-win-x64-small.zip`
   - Smaller framework-dependent ZIP for PCs that already have the required .NET 8 Desktop Runtime and Windows App Runtime.
 
+## Checksums
+
+```text
+b9a207b77e48c9cc97b60cbf03b981104e687cc5e960059130976b9500fdfbdc  DimToOff-v0.6.0-setup.exe
+b2c579f1786d7b19f2a7ba719ca2441aaf721709ce63104c4bc5d5ac278351e9  DimToOff-v0.6.0-win-x64.zip
+d0d62b1e0574a04fef01bcd34e10063a2e02655f5a19d36814edac3202f03fb1  DimToOff-v0.6.0-win-x64-small.zip
+```
+
 ## Known Limitations
 
 - The screen saver guard recognizes a saver by its window covering a whole screen from another process. A saver that draws
