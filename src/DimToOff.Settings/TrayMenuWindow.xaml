@@ -8,10 +8,9 @@
 
     <Grid
         x:Name="MenuRoot"
-        Width="286"
-        Height="334"
-        Background="#2B2B2B"
-        RequestedTheme="Dark">
+        Width="300"
+        Height="428"
+        Background="{ThemeResource SolidBackgroundFillColorQuarternaryBrush}">
         <Grid.Resources>
             <Style x:Key="MenuButtonStyle" TargetType="Button">
                 <Setter Property="Height" Value="40" />
@@ -21,18 +20,68 @@
                 <Setter Property="Background" Value="Transparent" />
                 <Setter Property="BorderThickness" Value="0" />
                 <Setter Property="CornerRadius" Value="6" />
-                <Setter Property="Foreground" Value="#F3F3F3" />
                 <Setter Property="FontSize" Value="14" />
+            </Style>
+
+            <Style x:Key="MenuIconStyle" TargetType="FontIcon">
+                <Setter Property="FontSize" Value="16" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Style>
+
+            <Style x:Key="MenuSeparatorStyle" TargetType="Rectangle">
+                <Setter Property="Height" Value="1" />
+                <Setter Property="Margin" Value="8,5" />
+                <Setter Property="Fill" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
             </Style>
         </Grid.Resources>
 
         <Border
             Padding="4"
             CornerRadius="8"
-            Background="#F02B2B2B"
-            BorderBrush="#484848"
+            BorderBrush="{ThemeResource SurfaceStrokeColorFlyoutBrush}"
             BorderThickness="1">
             <StackPanel>
+                <Grid Padding="10,8,10,10" ColumnSpacing="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="24" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Viewbox Width="18" Height="18" VerticalAlignment="Center">
+                        <Grid Width="32" Height="32">
+                            <Path
+                                Data="M 7.5 8.5 L 24.5 8.5 Q 27 8.5 27 11 L 27 20 Q 27 22.5 24.5 22.5 L 7.5 22.5 Q 5 22.5 5 20 L 5 11 Q 5 8.5 7.5 8.5 Z"
+                                Stroke="{ThemeResource TextFillColorPrimaryBrush}"
+                                StrokeThickness="2.6"
+                                StrokeLineJoin="Round"
+                                Fill="Transparent" />
+                            <Path
+                                Data="M 16 22.5 L 16 25.5 M 11.5 26 L 20.5 26"
+                                Stroke="{ThemeResource TextFillColorPrimaryBrush}"
+                                StrokeThickness="2.4"
+                                StrokeStartLineCap="Round"
+                                StrokeEndLineCap="Round" />
+                        </Grid>
+                    </Viewbox>
+
+                    <StackPanel Grid.Column="1">
+                        <TextBlock
+                            Text="DimToOff"
+                            FontSize="14"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <TextBlock
+                            x:Name="StatusText"
+                            FontSize="12"
+                            TextWrapping="NoWrap"
+                            TextTrimming="CharacterEllipsis"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                </Grid>
+
+                <Rectangle Style="{StaticResource MenuSeparatorStyle}" />
+
                 <Button Style="{StaticResource MenuButtonStyle}" Click="EnabledButton_Click">
                     <Grid ColumnSpacing="10">
                         <Grid.ColumnDefinitions>
@@ -43,16 +92,29 @@
                             x:Name="EnabledCheck"
                             Glyph="&#xE73E;"
                             FontSize="13"
-                            Foreground="#D7D7D7"
-                            VerticalAlignment="Center" />
-                        <TextBlock
-                            Grid.Column="1"
-                            Text="Enabled"
-                            VerticalAlignment="Center" />
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Grid.Column="1" Text="DimToOff enabled" VerticalAlignment="Center" />
                     </Grid>
                 </Button>
 
-                <Rectangle Height="1" Fill="#3D3D3D" Margin="8,5" />
+                <Button Style="{StaticResource MenuButtonStyle}" Click="IdleBlackoutButton_Click">
+                    <Grid ColumnSpacing="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="24" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon
+                            x:Name="IdleBlackoutCheck"
+                            Glyph="&#xE73E;"
+                            FontSize="13"
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Grid.Column="1" Text="Blank when I am away" VerticalAlignment="Center" />
+                    </Grid>
+                </Button>
+
+                <Rectangle Style="{StaticResource MenuSeparatorStyle}" />
 
                 <Button Style="{StaticResource MenuButtonStyle}" Click="BlankButton_Click">
                     <Grid ColumnSpacing="10">
@@ -60,7 +122,7 @@
                             <ColumnDefinition Width="24" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <FontIcon Glyph="&#xE706;" FontSize="16" Foreground="#D7D7D7" VerticalAlignment="Center" />
+                        <FontIcon Glyph="&#xE706;" Style="{StaticResource MenuIconStyle}" />
                         <TextBlock Grid.Column="1" Text="Blank screen now" VerticalAlignment="Center" />
                     </Grid>
                 </Button>
@@ -71,7 +133,7 @@
                             <ColumnDefinition Width="24" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <FontIcon Glyph="&#xE72C;" FontSize="16" Foreground="#D7D7D7" VerticalAlignment="Center" />
+                        <FontIcon Glyph="&#xE72C;" Style="{StaticResource MenuIconStyle}" />
                         <TextBlock Grid.Column="1" Text="Restore brightness" VerticalAlignment="Center" />
                     </Grid>
                 </Button>
@@ -82,12 +144,12 @@
                             <ColumnDefinition Width="24" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <FontIcon Glyph="&#xE713;" FontSize="16" Foreground="#D7D7D7" VerticalAlignment="Center" />
+                        <FontIcon Glyph="&#xE713;" Style="{StaticResource MenuIconStyle}" />
                         <TextBlock Grid.Column="1" Text="Settings" VerticalAlignment="Center" />
                     </Grid>
                 </Button>
 
-                <Rectangle Height="1" Fill="#3D3D3D" Margin="8,5" />
+                <Rectangle Style="{StaticResource MenuSeparatorStyle}" />
 
                 <Button Style="{StaticResource MenuButtonStyle}" Click="StartWithWindowsButton_Click">
                     <Grid ColumnSpacing="10">
@@ -99,8 +161,8 @@
                             x:Name="StartWithWindowsCheck"
                             Glyph="&#xE73E;"
                             FontSize="13"
-                            Foreground="#D7D7D7"
-                            VerticalAlignment="Center" />
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         <TextBlock Grid.Column="1" Text="Open at boot" VerticalAlignment="Center" />
                     </Grid>
                 </Button>
@@ -111,12 +173,12 @@
                             <ColumnDefinition Width="24" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <FontIcon Glyph="&#xE946;" FontSize="16" Foreground="#D7D7D7" VerticalAlignment="Center" />
+                        <FontIcon Glyph="&#xE946;" Style="{StaticResource MenuIconStyle}" />
                         <TextBlock Grid.Column="1" Text="About" VerticalAlignment="Center" />
                     </Grid>
                 </Button>
 
-                <Rectangle Height="1" Fill="#3D3D3D" Margin="8,5" />
+                <Rectangle Style="{StaticResource MenuSeparatorStyle}" />
 
                 <Button Style="{StaticResource MenuButtonStyle}" Click="ExitButton_Click">
                     <Grid ColumnSpacing="10">
@@ -124,8 +186,8 @@
                             <ColumnDefinition Width="24" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <FontIcon Glyph="&#xE7E8;" FontSize="16" Foreground="#D7D7D7" VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="1" Text="Exit" VerticalAlignment="Center" />
+                        <FontIcon Glyph="&#xE7E8;" Style="{StaticResource MenuIconStyle}" />
+                        <TextBlock Grid.Column="1" Text="Exit DimToOff" VerticalAlignment="Center" />
                     </Grid>
                 </Button>
             </StackPanel>
