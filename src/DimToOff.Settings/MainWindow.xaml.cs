@@ -158,6 +158,9 @@ public sealed partial class MainWindow : Window
         PreserveBrightnessToggle.IsOn = settings.PreserveBrightnessOnPowerModeChange;
         BrightnessTriggerToggle.IsOn = settings.BrightnessBlackoutEnabled;
         SetComboValue(DisplayModeCombo, settings.DisplayOffMode);
+        ScreenSaverGuardToggle.IsOn = settings.ScreenSaverGuardEnabled;
+        SetComboValue(ScreenSaverScopeCombo, settings.ScreenSaverGuardScope);
+        WindowsScreenSaverToggle.IsOn = settings.ScreenSaverGuardSuspendsWindowsScreenSaver;
 
         IdleBlackoutToggle.IsOn = settings.IdleBlackoutEnabled;
         SetTimeoutValue(PluggedInTimeoutCombo, settings.IdleTimeoutPluggedInSeconds);
@@ -200,6 +203,9 @@ public sealed partial class MainWindow : Window
             BrightnessGuardTolerancePercent = settings.BrightnessGuardTolerancePercent,
             BrightnessBlackoutEnabled = BrightnessTriggerToggle.IsOn,
             DisplayOffMode = GetComboValue(DisplayModeCombo, settings.DisplayOffMode),
+            ScreenSaverGuardEnabled = ScreenSaverGuardToggle.IsOn,
+            ScreenSaverGuardScope = GetComboValue(ScreenSaverScopeCombo, settings.ScreenSaverGuardScope),
+            ScreenSaverGuardSuspendsWindowsScreenSaver = WindowsScreenSaverToggle.IsOn,
             OffThreshold = NumberValue(OffThresholdBox, settings.OffThreshold),
             FadeToBlackMs = NumberValue(FadeToBlackBox, settings.FadeToBlackMs),
             IgnoreInputMs = NumberValue(IgnoreInputBox, settings.IgnoreInputMs),
@@ -267,6 +273,11 @@ public sealed partial class MainWindow : Window
         OffThresholdRow.IsEnabled = BrightnessTriggerToggle.IsOn;
         FadeRow.IsEnabled = blackout;
         MonitorPowerInfo.IsOpen = !blackout;
+
+        bool guardEnabled = ScreenSaverGuardToggle.IsOn;
+        ScreenSaverScopeRow.IsEnabled = guardEnabled;
+        WindowsScreenSaverRow.IsEnabled = guardEnabled;
+        ScreenSaverGuardInfo.IsOpen = guardEnabled;
 
         bool idleEnabled = IdleBlackoutToggle.IsOn;
         PluggedInRow.IsEnabled = idleEnabled;
